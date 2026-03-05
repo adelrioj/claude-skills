@@ -300,7 +300,7 @@ Converted [M] slices -> [N] user stories
   Branch:              [resolved branch name]
 
 Ready to run:
-  .claude/skills/shape-to-ralph/scripts/ralph.sh
+  ${CLAUDE_PLUGIN_ROOT}/skills/shape-to-ralph/scripts/ralph.sh
 ```
 
 ---

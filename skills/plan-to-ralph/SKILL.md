@@ -246,7 +246,7 @@ Converted [M] tasks -> [N] user stories
   Branch:             [resolved branch name]
 
 Ready to run:
-  .claude/skills/plan-to-ralph/scripts/ralph.sh
+  ${CLAUDE_PLUGIN_ROOT}/skills/plan-to-ralph/scripts/ralph.sh
 ```
 
 ---

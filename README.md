@@ -1,6 +1,6 @@
 # Claude Skills
 
-Shared [Claude Code](https://claude.com/claude-code) skills for autonomous story execution using Ralph — a loop that reads `tasks/prd.json` and drives Claude Code or OpenAI Codex through one user story per iteration.
+A [Claude Code](https://claude.com/claude-code) plugin with shared skills for autonomous story execution using Ralph — a loop that reads `tasks/prd.json` and drives Claude Code or OpenAI Codex through one user story per iteration.
 
 ## Skills
 
@@ -16,25 +16,24 @@ The ralph skills each include two execution scripts:
 
 ## Install
 
+Add as a Claude Code plugin:
+
 ```bash
-git clone https://github.com/adelrioj/claude-skills.git ~/.local/share/claude-skills
-~/.local/share/claude-skills/install.sh
+claude plugin add adelrioj/claude-skills
+```
+
+Or install locally for development:
+
+```bash
+git clone https://github.com/adelrioj/claude-skills.git
+claude --plugin-dir ./claude-skills
 ```
 
 ## Uninstall
 
 ```bash
-rm ~/.claude/skills/plan-to-ralph ~/.claude/skills/shape-to-ralph ~/.claude/skills/swarm-execute
-rm -rf ~/.local/share/claude-skills
+claude plugin remove claude-skills
 ```
-
-## Update
-
-```bash
-cd ~/.local/share/claude-skills && git pull
-```
-
-Changes apply immediately to all projects — symlinks point to the repo.
 
 ## Usage
 
@@ -42,12 +41,12 @@ After converting a plan or shape to `tasks/prd.json`:
 
 ```bash
 # Claude Code
-.claude/skills/plan-to-ralph/scripts/ralph.sh
-.claude/skills/shape-to-ralph/scripts/ralph.sh
+${CLAUDE_PLUGIN_ROOT}/skills/plan-to-ralph/scripts/ralph.sh
+${CLAUDE_PLUGIN_ROOT}/skills/shape-to-ralph/scripts/ralph.sh
 
 # OpenAI Codex
-.claude/skills/plan-to-ralph/scripts/ralph-codex.sh --model o3
-.claude/skills/shape-to-ralph/scripts/ralph-codex.sh --model o4-mini
+${CLAUDE_PLUGIN_ROOT}/skills/plan-to-ralph/scripts/ralph-codex.sh --model o3
+${CLAUDE_PLUGIN_ROOT}/skills/shape-to-ralph/scripts/ralph-codex.sh --model o4-mini
 ```
 
-All scripts auto-detect the project root via `git rev-parse --show-toplevel`, so they work correctly when symlinked from any project.
+All scripts auto-detect the project root via `git rev-parse --show-toplevel`, so they work correctly from any location.

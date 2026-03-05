@@ -34,9 +34,9 @@ If Agent Teams is not available or any prerequisite fails, tell the user:
 
 ```
 Agent Teams not available. Fall back to sequential execution:
-  .claude/skills/shape-to-ralph/scripts/ralph.sh
+  ${CLAUDE_PLUGIN_ROOT}/skills/shape-to-ralph/scripts/ralph.sh
   — or —
-  .claude/skills/plan-to-ralph/scripts/ralph.sh
+  ${CLAUDE_PLUGIN_ROOT}/skills/plan-to-ralph/scripts/ralph.sh
 ```
 
 ---
@@ -268,7 +268,7 @@ Execute one batch at a time. Within each batch, spawn teammates in parallel.
 
 Each teammate runs in its own worktree for isolation. Provide the teammate with context by filling the `teammate-prompt.md` template.
 
-**Fill the template** (from `.claude/skills/swarm-execute/templates/teammate-prompt.md`):
+**Fill the template** (from `${CLAUDE_PLUGIN_ROOT}/skills/swarm-execute/templates/teammate-prompt.md`):
 
 | Placeholder               | Value                                                                                                            |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
@@ -331,7 +331,7 @@ After all stories in a batch complete their quality gates, run architect and QA 
 
 Spawn an architect reviewer and a QA reviewer **in parallel** for each story. Both are read-only — they do NOT get a worktree.
 
-**Fill the architect reviewer template** (from `.claude/skills/swarm-execute/templates/architect-reviewer-prompt.md`):
+**Fill the architect reviewer template** (from `${CLAUDE_PLUGIN_ROOT}/skills/swarm-execute/templates/architect-reviewer-prompt.md`):
 
 | Placeholder               | Value                                                |
 | ------------------------- | ---------------------------------------------------- |
@@ -343,7 +343,7 @@ Spawn an architect reviewer and a QA reviewer **in parallel** for each story. Bo
 | `{{WORKTREE_BRANCH}}`     | The teammate's worktree branch name from swarm-state |
 | `{{BASE_BRANCH}}`         | From prd.json `branchName`                           |
 
-**Fill the QA reviewer template** (from `.claude/skills/swarm-execute/templates/qa-reviewer-prompt.md`) with the same placeholders.
+**Fill the QA reviewer template** (from `${CLAUDE_PLUGIN_ROOT}/skills/swarm-execute/templates/qa-reviewer-prompt.md`) with the same placeholders.
 
 **Spawn both reviewers**:
 
@@ -380,7 +380,7 @@ Extract the JSON output from each reviewer's response. Look for the JSON block c
 
 Aggregate blockers from both reviewers and send a remediation prompt to the coding teammate.
 
-**Fill the remediation template** (from `.claude/skills/swarm-execute/templates/remediation-prompt.md`):
+**Fill the remediation template** (from `${CLAUDE_PLUGIN_ROOT}/skills/swarm-execute/templates/remediation-prompt.md`):
 
 | Placeholder               | Value                                                                  |
 | ------------------------- | ---------------------------------------------------------------------- |
