@@ -16,23 +16,41 @@ The ralph skills each include two execution scripts:
 
 ## Install
 
-Add as a Claude Code plugin:
+Add the marketplace, then install the plugin:
 
 ```bash
-claude plugin add adelrioj/claude-skills
+claude plugin marketplace add adelrioj/claude-skills
+claude plugin install claude-skills@claude-skills-marketplace
 ```
 
-Or install locally for development:
+Restart Claude Code for the plugin to load.
+
+## Update
 
 ```bash
-git clone https://github.com/adelrioj/claude-skills.git
-claude --plugin-dir ./claude-skills
+claude plugin marketplace update claude-skills-marketplace
+claude plugin update claude-skills@claude-skills-marketplace
 ```
 
 ## Uninstall
 
 ```bash
-claude plugin remove claude-skills
+claude plugin uninstall claude-skills@claude-skills-marketplace
+```
+
+To also remove the marketplace:
+
+```bash
+claude plugin marketplace remove claude-skills-marketplace
+```
+
+## Local Development
+
+For developing the plugin locally (session-only):
+
+```bash
+git clone https://github.com/adelrioj/claude-skills.git
+claude --plugin-dir ./claude-skills
 ```
 
 ## Usage
