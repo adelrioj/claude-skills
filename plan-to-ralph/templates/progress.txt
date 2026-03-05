@@ -1,0 +1,9 @@
+# Progress for: {{FEATURE_NAME}}
+
+> Source plan: {{PLAN_FILE_PATH}}
+> Source design: {{DESIGN_DOC_PATH}}
+> Generated: {{YYYY-MM-DD}}
+
+## Iteration Log
+
+<!-- Ralph appends timestamped entries below this line -->

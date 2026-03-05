@@ -1,0 +1,22 @@
+{
+  "project": "{{PROJECT_NAME}}",
+  "branchName": "{{BRANCH_NAME}}",
+  "description": "{{R0_GOAL}}. Shaped from {{SHAPE_TITLE}}. See {{SHAPING_DOC_PATH}} for full requirements and design.",
+  "qualityGates": ["{{QUALITY_GATE_COMMAND}}"],
+  "e2eCommand": "{{E2E_COMMAND_OR_OMIT}}",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "{{SLICE_NAME}}",
+      "description": "As a developer, I want {{MAX_20_WORDS_FROM_DEMO}}.",
+      "acceptanceCriteria": [
+        "{{MACHINE_VERIFIABLE_CRITERION_FROM_DEMO}}",
+        "{{CRITERION_DERIVED_FROM_WIRING}}",
+        "{{QUALITY_GATE}}"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Files:\n  CREATE: {{PATH}} — {{DESCRIPTION}}\n  MODIFY: {{PATH}} — {{DESCRIPTION}}\n\nAffordances:\n  UI: {{UI_AFFORDANCE_LIST}}\n  Code: {{CODE_AFFORDANCE_LIST}}\n\nWiring summary: {{NATURAL_LANGUAGE_WIRING}}\n\nMechanism from shape: {{PART_REFERENCES}}\n\nSource: Slice V1 from {{SLICES_DOC_PATH}}"
+    }
+  ]
+}

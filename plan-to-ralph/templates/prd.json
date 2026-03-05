@@ -1,0 +1,18 @@
+{
+  "project": "{{PROJECT_NAME}}",
+  "branchName": "{{BRANCH_NAME}}",
+  "description": "{{GOAL_SENTENCE}}. See {{PLAN_FILE_PATH}} for full design.",
+  "qualityGates": ["{{QUALITY_GATE_COMMAND}}"],
+  "e2eCommand": "{{E2E_COMMAND_OR_OMIT}}",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "{{COMPONENT_NAME}}",
+      "description": "As a developer, I want {{MAX_20_WORDS_FROM_TASK}}.",
+      "acceptanceCriteria": ["{{MACHINE_VERIFIABLE_CRITERION}}", "{{QUALITY_GATE}}"],
+      "priority": 1,
+      "passes": false,
+      "notes": "Files: {{FILE_LIST}}. Source: Task N"
+    }
+  ]
+}

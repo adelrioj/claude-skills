@@ -1,0 +1,10 @@
+# Progress for: {{FEATURE_NAME}}
+
+> Shaping doc: {{SHAPING_DOC_PATH}}
+> Slices doc: {{SLICES_DOC_PATH}}
+> Selected shape: {{SHAPE_LETTER}} — {{SHAPE_TITLE}}
+> Generated: {{YYYY-MM-DD}}
+
+## Iteration Log
+
+<!-- Ralph appends timestamped entries below this line -->
