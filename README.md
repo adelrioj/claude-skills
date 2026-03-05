@@ -1,6 +1,6 @@
-# Ralph Skills
+# Claude Skills
 
-[Claude Code](https://claude.com/claude-code) skills for autonomous story execution using Ralph — a loop that reads `tasks/prd.json` and drives Claude Code or OpenAI Codex through one user story per iteration.
+Shared [Claude Code](https://claude.com/claude-code) skills for autonomous story execution using Ralph — a loop that reads `tasks/prd.json` and drives Claude Code or OpenAI Codex through one user story per iteration.
 
 ## Skills
 
@@ -8,37 +8,30 @@
 
 **`/shape-to-ralph`** — Convert shaping artifacts (requirements, breadboard, slices) directly into Ralph's `prd.json` format. No intermediate plan needed — the shaped slices ARE the spec.
 
-Each skill includes two execution scripts:
+**`/swarm-execute`** — Execute `prd.json` stories in parallel using Claude Code Agent Teams. Reads existing `tasks/prd.json` from `/shape-to-ralph` or `/plan-to-ralph`.
+
+The ralph skills each include two execution scripts:
 - **`ralph.sh`** — Runs the loop with Claude Code (`claude --print`)
 - **`ralph-codex.sh`** — Runs the loop with OpenAI Codex (`codex exec --full-auto`)
 
 ## Install
 
 ```bash
-git clone <your-repo-url> ~/.local/share/ralph-skills
-~/.local/share/ralph-skills/install.sh
-```
-
-Or manually:
-
-```bash
-git clone <your-repo-url> ~/.local/share/ralph-skills
-mkdir -p ~/.claude/skills
-ln -sf ~/.local/share/ralph-skills/plan-to-ralph ~/.claude/skills/plan-to-ralph
-ln -sf ~/.local/share/ralph-skills/shape-to-ralph ~/.claude/skills/shape-to-ralph
+git clone https://github.com/adelrioj/claude-skills.git ~/.local/share/claude-skills
+~/.local/share/claude-skills/install.sh
 ```
 
 ## Uninstall
 
 ```bash
-rm ~/.claude/skills/plan-to-ralph ~/.claude/skills/shape-to-ralph
-rm -rf ~/.local/share/ralph-skills
+rm ~/.claude/skills/plan-to-ralph ~/.claude/skills/shape-to-ralph ~/.claude/skills/swarm-execute
+rm -rf ~/.local/share/claude-skills
 ```
 
 ## Update
 
 ```bash
-cd ~/.local/share/ralph-skills && git pull
+cd ~/.local/share/claude-skills && git pull
 ```
 
 Changes apply immediately to all projects — symlinks point to the repo.
