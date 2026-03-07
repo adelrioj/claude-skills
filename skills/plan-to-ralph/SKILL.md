@@ -245,7 +245,7 @@ Converted [M] tasks -> [N] user stories
   Source plan:         docs/plans/[file]
   Branch:             [resolved branch name]
 
-Ready to run:
+Ready to run (resolve ${CLAUDE_PLUGIN_ROOT} to the actual plugin install path before displaying):
   ${CLAUDE_PLUGIN_ROOT}/skills/plan-to-ralph/scripts/ralph.sh
 ```
 
