@@ -299,7 +299,7 @@ Converted [M] slices -> [N] user stories
   Slices doc:          [path]
   Branch:              [resolved branch name]
 
-Ready to run:
+Ready to run (resolve ${CLAUDE_PLUGIN_ROOT} to the actual plugin install path before displaying):
   ${CLAUDE_PLUGIN_ROOT}/skills/shape-to-ralph/scripts/ralph.sh
 ```
 
