@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A Claude Code plugin providing three skills for autonomous story execution using "Ralph" — a loop that reads `tasks/prd.json` and drives Claude Code or OpenAI Codex through one user story per iteration.
+A Claude Code plugin providing skills for autonomous story execution using "Ralph" — a loop that reads `tasks/prd.json` and drives Claude Code or OpenAI Codex through one user story per iteration — plus a spec review skill that hardens brainstorming design specs via adversarial Codex review.
 
 ## Plugin Structure
 
@@ -12,6 +12,8 @@ This is a Claude Code plugin (`.claude-plugin/plugin.json`). Skills live under `
 - `SKILL.md` — The skill definition (frontmatter + instructions Claude follows)
 - `scripts/` — Shell scripts (`ralph.sh` for Claude Code, `ralph-codex.sh` for OpenAI Codex)
 - `templates/` — Template files (`prd.json`, `progress.txt`, `findings.md`) with `{{PLACEHOLDER}}` syntax
+
+Hooks live at the plugin root under `hooks/hooks.json` — they are registered globally, not per-skill.
 
 ## Skills
 
@@ -23,6 +25,11 @@ Converts shaping artifacts (requirements, breadboard, slices) directly into `tas
 
 ### `/swarm-execute`
 Parallel execution of `prd.json` stories using Claude Code Agent Teams. Performs dependency analysis (text scanning, file overlap, affordance cross-references), generates parallel batches, spawns teammates in worktrees, runs architect + QA review gates per story, and merges sequentially by priority.
+
+### `/brainstorming-spec-review`
+Adversarial review of design specs using Codex as an independent reviewer. Sends the spec to `codex exec` with a 10-category review checklist, reads findings, fixes CRITICAL and IMPORTANT issues, and loops until the spec passes (max 3 iterations). Requires `codex` CLI in PATH.
+
+A PostToolUse hook (`hooks/hooks.json`) automatically triggers this skill when brainstorming writes a spec file matching `specs/*-design.md`. The hook injects a systemMessage after the Write completes, so the review runs between brainstorming's self-review step and the user review step.
 
 ## Architecture: The Ralph Loop
 
@@ -59,3 +66,6 @@ Distributed via marketplace (`marketplace.json`). Install/update/uninstall comma
 - Shell scripts use `set -euo pipefail` and require `jq` for JSON parsing
 - Ralph scripts track consecutive failures per story and stop after 3 retries (`MAX_STORY_RETRIES=3`)
 - Swarm teammates never touch shared files (`prd.json`, `progress.txt`, `findings.md`, `swarm-state.json`) — only the lead orchestrator writes to these
+- Spec review findings are written to `/tmp/spec-review-findings-<timestamp>.md` — preserved for audit, never committed to the repo
+- The spec review loop caps at 3 iterations to prevent infinite fix/re-break cycles
+- Hooks live in `hooks/hooks.json` at the plugin root — the plugin system does not discover hooks nested inside skill directories
