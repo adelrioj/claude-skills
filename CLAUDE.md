@@ -27,7 +27,7 @@ Converts shaping artifacts (requirements, breadboard, slices) directly into `tas
 Parallel execution of `prd.json` stories using Claude Code Agent Teams. Performs dependency analysis (text scanning, file overlap, affordance cross-references), generates parallel batches, spawns teammates in worktrees, runs architect + QA review gates per story, and merges sequentially by priority.
 
 ### `/brainstorming-spec-review`
-Adversarial review of design specs using Codex as an independent reviewer. Sends the spec to `codex exec` with a 10-category review checklist, reads findings, fixes CRITICAL and IMPORTANT issues, and loops until the spec passes (max 3 iterations). Requires `codex` CLI in PATH.
+Adversarial review of design specs using `pi` (local qwen via LMStudio) as an independent reviewer. Sends the spec to `pi --print` with a 10-category review checklist, reads findings, fixes CRITICAL and IMPORTANT issues, and loops until the spec passes (max 3 iterations). Requires `pi` CLI in PATH and `lmstudio/qwen3.6-35b-a3b` loaded in LMStudio at `http://127.0.0.1:1234`. The reviewer is invoked with `--tools read,grep,find,ls,bash` so it can verify codebase references but cannot modify files.
 
 A PostToolUse hook (`hooks/hooks.json`) automatically triggers this skill when brainstorming writes a spec file matching `specs/*-design.md`. The hook injects a systemMessage after the Write completes, so the review runs between brainstorming's self-review step and the user review step.
 
