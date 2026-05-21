@@ -1,0 +1,53 @@
+name: Auto-bump plugin version
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'skills/**'
+      - 'hooks/**'
+      - '.claude-plugin/**'
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump patch version if unchanged
+        run: |
+          set -euo pipefail
+
+          MARKETPLACE=.claude-plugin/marketplace.json
+          PLUGIN=.claude-plugin/plugin.json
+
+          current=$(jq -r '.plugins[0].version' "$MARKETPLACE")
+          previous=$(git show HEAD~1:"$MARKETPLACE" 2>/dev/null | jq -r '.plugins[0].version' || echo "")
+
+          if [ "$current" != "$previous" ] && [ -n "$previous" ]; then
+            echo "Version already changed ($previous -> $current) — nothing to do."
+            exit 0
+          fi
+
+          IFS=. read -r major minor patch <<< "$current"
+          bumped="${major}.${minor}.$((patch + 1))"
+          echo "Bumping $current -> $bumped"
+
+          jq --arg v "$bumped" '.plugins[0].version = $v' "$MARKETPLACE" > "$MARKETPLACE.tmp"
+          mv "$MARKETPLACE.tmp" "$MARKETPLACE"
+
+          jq --arg v "$bumped" '.version = $v' "$PLUGIN" > "$PLUGIN.tmp"
+          mv "$PLUGIN.tmp" "$PLUGIN"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$MARKETPLACE" "$PLUGIN"
+          git commit -m "chore: bump version to $bumped [skip ci]"
+          git push
