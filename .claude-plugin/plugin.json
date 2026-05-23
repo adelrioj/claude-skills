@@ -1,6 +1,6 @@
 {
   "name": "claude-skills",
-  "description": "Shared skills for autonomous story execution using Ralph — converts plans and shapes into prd.json and drives Claude Code or Codex through one user story per iteration",
+  "description": "Shared skills for autonomous story execution using Ralph — converts plans into prd.json and drives Claude Code or Codex through one user story per iteration",
   "version": "1.0.1",
   "author": {
     "name": "adelrioj",
@@ -12,7 +12,6 @@
     "ralph",
     "autonomous",
     "stories",
-    "shaping",
     "prd",
     "swarm",
     "agent-teams",
