@@ -37,16 +37,23 @@ The plan is the **source of truth**. Do NOT re-interview the user or regenerate 
 ## Step 1: Locate the Plan
 
 1. If the user provided a file path as argument, use it
-2. Otherwise, scan `docs/plans/` for the most recent plan file by date prefix (YYYY-MM-DD). Match any of: `*-plan.md`, `*-implementation.md` (do NOT match `*-design.md` — design docs are provided separately)
+2. Otherwise, scan for the most recent plan file by date prefix (YYYY-MM-DD), in this order:
+   - `docs/superpowers/plans/` (default for `superpowers:writing-plans` ≥ 5.1.0)
+   - `docs/plans/` (legacy location, kept for older repos)
+   Match `YYYY-MM-DD-*.md` (do NOT match `*-design.md` — design docs are provided separately)
 3. If no plan found: **STOP** — `"No implementation plan found. Run /superpowers:writing-plans first."`
 
-Read the plan file. Then ask:
+Read the plan file. Then check the header for a `**Spec:**` line (5.1.0+ plans may carry one pointing at `docs/superpowers/specs/<slug>-design.md`). Ask:
 
-> Do you have a companion design doc? Provide the path, or press Enter to skip.
+> Do you have a companion design doc?
+> - If the plan's `**Spec:**` line points at `docs/superpowers/specs/<file>`, suggest that path and ask "use this, or override?"
+> - Otherwise, prompt for the path or accept Enter to skip.
 
-No auto-detection. The user explicitly provides the design doc path.
+No silent auto-loading — always confirm with the user.
 
-**Single-file plans:** If the plan itself contains architecture decisions (e.g., a `## Decisions` table or `## Architecture` section), it doubles as its own design doc. In this case, accept "skip" for the design doc and extract architecture context directly from the plan file in Step 9.
+**Single-file plans:** Plans from `superpowers:writing-plans` 5.1.0+ are self-contained — the header carries `**Goal:**`, `**Architecture:**`, and `**Tech Stack:**` lines that supply the design context. Accept "skip" for the design doc and extract architecture context from the plan header in Step 9.
+
+**Header callout to ignore:** 5.1.0+ plans begin with a blockquote callout starting `> **For agentic workers:** REQUIRED SUB-SKILL:`. This is metadata pointing engineers at `subagent-driven-development` or `executing-plans`; it is **not** a task. Skip it during validation and mapping.
 
 ---
 
@@ -54,12 +61,10 @@ No auto-detection. The user explicitly provides the design doc path.
 
 Verify the plan contains:
 
-- A `**Goal:**` line or `## Goal` section
-- At least one numbered section heading: `## Task N:`, `## Component N:`, `## Step N:`, or `## Phase N:` (any heading level, any of these labels)
-- File paths in tasks (`Create:`, `Modify:`, `Test:`, `**File:**`, or paths like `src/...`, `.github/...`)
-- Verification steps — either per-task (`Run:`, `Expected:`, or test/lint commands) OR a global `## Testing Strategy` / `## Testing` / `## Verification` section
-
-If verification steps are global rather than per-task, distribute them to relevant stories during mapping (Step 3).
+- A `**Goal:**` line (5.1.0 header) or `## Goal` section (legacy)
+- At least one task heading: `### Task N: [Component Name]` (any heading level). Older plans may also use `## Task N:` — accept either.
+- A `**Files:**` block per task with `Create:` / `Modify:` / `Test:` bullets (5.1.0). Older plans may list paths inline (`src/...`, `.github/...`) — accept either.
+- Per-step verification: each task contains `- [ ] **Step N:**` checkboxes, with `Run: <command>` + `Expected: <output>` lines on the verification steps (5.1.0). Older plans may have task-level `Run:`/`Expected:` — accept either.
 
 If validation fails, list what's missing and ask if user wants to proceed. **Never invent requirements to fill gaps.**
 
@@ -67,38 +72,62 @@ If validation fails, list what's missing and ask if user wants to proceed. **Nev
 
 ## Step 3: Map Tasks to Stories
 
-For each numbered section in the plan (`## Task N:`, `## Component N:`, `## Step N:`, or `## Phase N:`):
+**Granularity rule:** One Task = one Ralph user story = one Ralph iteration. The 5 sub-steps inside a 5.1.0 task (Write test → Verify fail → Implement → Verify pass → Commit) all happen **within** that single iteration. Do **not** split sub-steps into separate stories.
 
-| Plan Element       | Ralph Story Field    | Mapping Rule                                                    |
-| ------------------ | -------------------- | --------------------------------------------------------------- |
-| Section number     | `id`                 | `US-{NNN}` zero-padded                                          |
-| Section name       | `title`              | Verbatim from heading (after the number)                        |
-| Section context    | `description`        | "As a developer, I want..." (20 words max, derived from task)   |
-| Verification steps | `acceptanceCriteria` | Rewrite as machine-verifiable checks (see below)                |
-| Section number     | `priority`           | Sequential after any merges (encodes dependency ordering)       |
-| —                  | `passes`             | Always `false`                                                  |
-| File paths         | `notes`              | `"Files: Create src/foo.ts, Modify src/bar.ts. Source: Task N"` |
+For each `Task N:` heading in the plan:
 
-**Global verification distribution:** If the plan has a global testing section instead of per-task verification, map each test scenario to the most relevant story. Tests that span multiple stories go on the last story in the dependency chain.
+| Plan Element                              | Ralph Story Field    | Mapping Rule                                                    |
+| ----------------------------------------- | -------------------- | --------------------------------------------------------------- |
+| Task number                               | `id`                 | `US-{NNN}` zero-padded                                          |
+| Task name (Component Name)                | `title`              | Verbatim from heading (after the number)                        |
+| Task context                              | `description`        | "As a developer, I want..." (20 words max, derived from task)   |
+| `Run:` / `Expected:` from sub-steps       | `acceptanceCriteria` | Lift each `Run:` line as a criterion (see below)                |
+| Task number                               | `priority`           | Sequential (encodes dependency ordering)                        |
+| —                                         | `passes`             | Always `false`                                                  |
+| Paths from the `**Files:**` block         | `notes`              | `"Files: Create src/foo.ts, Modify src/bar.ts, Test tests/foo.test.ts. Source: Task N"` |
 
-### Machine-Verifiable Acceptance Criteria
+### Acceptance Criteria from Sub-Steps
 
-Every criterion must be checkable by running a command or inspecting output:
+5.1.0 tasks carry exact verification commands, but the **format varies in the wild**:
 
-| Vague (from plan)                | Machine-verifiable (for Ralph)                 |
+- **Template form** (from `writing-plans` SKILL.md): a literal `Run: <command>` line followed by `Expected: <output>`.
+- **Common real-world form**: a fenced ```` ```bash ```` / ```` ```sh ```` / unlabeled fenced block immediately under the step heading, followed by an `Expected: ...` paragraph.
+
+Treat both as equivalent. Extraction rule:
+
+> A "verification pair" is *(command-source, `Expected:` paragraph)* where the command-source is **either** a `Run:` line **or** the first fenced code block under the step heading whose language hint is `bash`, `sh`, or unset.
+
+For each verification pair found, emit one `acceptanceCriteria` entry:
+
+| Verification pair in plan                                                                 | acceptanceCriteria entry                            |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `Run: pytest tests/path/test.py -v` + `Expected: PASS`                                    | `"pytest tests/path/test.py -v passes"`             |
+| ```` ```\nuv run pytest tests/foo_test.py -v\n``` ```` + `Expected: all 4 tests PASS.`    | `"uv run pytest tests/foo_test.py -v: all 4 tests pass"` |
+| `Run: pnpm typecheck` + `Expected: no errors`                                             | `"pnpm typecheck passes"`                           |
+| Multi-line bash block (e.g. `cd …; pytest …`)                                             | Use the last meaningful command as the criterion stem; keep the `Expected:` summary as the assertion |
+| Step shows a code block only, no `Expected:` paragraph after                              | Skip — it's an implementation step, not verification |
+
+**Human-verification steps:** if the `Expected:` paragraph says "Inspect the output", "If WARN lines appear...", or otherwise requires human judgment, do **not** silently convert it to a machine criterion. Emit it as `acceptanceCriteria` text prefixed with `"[manual] "` (e.g. `"[manual] no WARN lines in spread verifier output"`) and flag it in the review summary (Step 7). Ralph will surface manual criteria in iteration logs rather than auto-pass them.
+
+Older plans may use vague language. For those, rewrite:
+
+| Vague (legacy)                   | Machine-verifiable (for Ralph)                 |
 | -------------------------------- | ---------------------------------------------- |
 | "Works correctly"                | Remove or replace with specific test assertion |
-| `Run: pnpm test; Expected: PASS` | `"pnpm test passes"`                           |
 | "Validate JSON is well-formed"   | `"JSON parses without errors"`                 |
-| "Code is clean"                  | `"pnpm lint passes"`                           |
+| "Code is clean"                  | `"<lint command> passes"`                      |
 
-If vague criteria can't be made verifiable, flag them in the review summary (Step 7).
+If a step lacks both a verification pair and any verifiable criterion, flag it in the review summary (Step 7).
 
 ---
 
-## Step 4: Detect TDD Pairs
+## Step 4: TDD Bundling (5.1.0 plans only)
 
-Scan adjacent tasks for TDD patterns:
+5.1.0+ plans from `superpowers:writing-plans` already bundle TDD **inside** each task as 5 sub-steps (Write test → Verify fail → Implement → Verify pass → Commit). There is nothing to merge — one Ralph iteration runs the whole TDD cycle for one task.
+
+**Only run the legacy detection below on plans that pre-date 5.1.0** — i.e. plans where you see separate top-level tasks like "Task 3: Write test for auth guard" and "Task 4: Implement auth guard".
+
+Legacy detection:
 
 - Task N contains "write failing test" / "write test" / "add test"
 - Task N+1 contains "implement" / "make test pass" / "write minimal code"
@@ -228,12 +257,22 @@ Replace all `{{PLACEHOLDER}}` values with content derived from the plan and desi
 
 ### Seeding findings.md
 
-The `findings.md` template has an Architecture Decisions section that must be seeded from the plan and/or design doc to give the first Ralph iteration a head start:
+The `findings.md` template has an Architecture Decisions section and a Resources section that must be seeded from the plan (and design doc if provided) to give the first Ralph iteration a head start:
 
-- If a design doc was provided, extract its key decisions into the Architecture Decisions table
-- If the plan contains a `## Decisions` table or architectural notes, extract those
-- If neither has extractable decisions, leave the table empty with a placeholder row: `| (none yet) | — |`
-- Never invent decisions — only extract what the source documents state
+**Architecture Decisions table — extract in this order:**
+
+1. If a design doc was provided, extract its key decisions
+2. From a 5.1.0 plan header: take the `**Architecture:**` sentence(s) and add as a single row — Decision = the approach in one phrase, Rationale = the "because…" clause if present, else `—`
+3. From legacy plans: extract any `## Decisions` table or `## Architecture` section verbatim
+4. If none of the above yield content, leave the table empty with a placeholder row: `| (none yet) | — |`
+
+**Resources section — also seed from the plan header:**
+
+- From a 5.1.0 plan header: take the `**Tech Stack:**` line. If it's a bullet list, copy the bullets. If it's a comma-separated prose sentence (common in practice — e.g. `Python 3.13, pandas, numpy, Optuna, statsmodels.stats.multitest.multipletests for BH-FDR`), split on top-level commas and emit one bullet per item, stripping trailing qualifier clauses (`X for Y` → `X`).
+- If the plan header has a `**Spec:**` line, add it as a bullet: `- Design spec: <path>`.
+- Skip if the header doesn't have a Tech Stack line.
+
+Never invent decisions or stack entries — only extract what the source documents state.
 
 ### Show Handoff
 
@@ -242,7 +281,7 @@ Converted [M] tasks -> [N] user stories
   tasks/prd.json:      Ralph-compatible PRD
   tasks/progress.txt:  iteration log (initially empty)
   tasks/findings.md:   cross-iteration knowledge (seeded from plan/design)
-  Source plan:         docs/plans/[file]
+  Source plan:         [resolved plan path]
   Branch:             [resolved branch name]
 
 Ready to run (resolve ${CLAUDE_PLUGIN_ROOT} to the actual plugin install path before displaying):

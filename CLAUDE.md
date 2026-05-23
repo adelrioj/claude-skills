@@ -18,7 +18,7 @@ Hooks live at the plugin root under `hooks/hooks.json` — they are registered g
 ## Skills
 
 ### `/plan-to-ralph`
-Converts a Superpowers implementation plan into `tasks/prd.json`. Reads `docs/plans/` for plan files. Outputs `tasks/prd.json`, `tasks/progress.txt`, `tasks/findings.md`.
+Converts a Superpowers implementation plan into `tasks/prd.json`. Reads `docs/superpowers/plans/` for plan files (5.1.0+ default), falling back to `docs/plans/` for legacy repos. Outputs `tasks/prd.json`, `tasks/progress.txt`, `tasks/findings.md`.
 
 ### `/swarm-execute`
 Parallel execution of `prd.json` stories using Claude Code Agent Teams. Performs dependency analysis (text scanning, file overlap, affordance cross-references), generates parallel batches, spawns teammates in worktrees, runs architect + QA review gates per story, and merges sequentially by priority.
