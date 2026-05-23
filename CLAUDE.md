@@ -20,9 +20,6 @@ Hooks live at the plugin root under `hooks/hooks.json` — they are registered g
 ### `/plan-to-ralph`
 Converts a Superpowers implementation plan into `tasks/prd.json`. Reads `docs/plans/` for plan files. Outputs `tasks/prd.json`, `tasks/progress.txt`, `tasks/findings.md`.
 
-### `/shape-to-ralph`
-Converts shaping artifacts (requirements, breadboard, slices) directly into `tasks/prd.json`. Reads `docs/shaping/` for shaping docs. Same output files as plan-to-ralph.
-
 ### `/swarm-execute`
 Parallel execution of `prd.json` stories using Claude Code Agent Teams. Performs dependency analysis (text scanning, file overlap, affordance cross-references), generates parallel batches, spawns teammates in worktrees, runs architect + QA review gates per story, and merges sequentially by priority.
 
@@ -33,7 +30,7 @@ A PostToolUse hook (`hooks/hooks.json`) automatically triggers this skill when b
 
 ## Architecture: The Ralph Loop
 
-Both `plan-to-ralph` and `shape-to-ralph` produce the same output format consumed by Ralph scripts:
+`plan-to-ralph` produces the output format consumed by Ralph scripts:
 
 ```
 tasks/prd.json       — Stories with acceptance criteria + quality gates

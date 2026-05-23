@@ -6,9 +6,7 @@ A [Claude Code](https://claude.com/claude-code) plugin with shared skills for au
 
 **`/plan-to-ralph`** — Convert a Superpowers implementation plan into Ralph's `prd.json` format. Maps plan tasks to user stories with machine-verifiable acceptance criteria, injects quality gates, and seeds cross-iteration context.
 
-**`/shape-to-ralph`** — Convert shaping artifacts (requirements, breadboard, slices) directly into Ralph's `prd.json` format. No intermediate plan needed — the shaped slices ARE the spec.
-
-**`/swarm-execute`** — Execute `prd.json` stories in parallel using Claude Code Agent Teams. Reads existing `tasks/prd.json` from `/shape-to-ralph` or `/plan-to-ralph`.
+**`/swarm-execute`** — Execute `prd.json` stories in parallel using Claude Code Agent Teams. Reads existing `tasks/prd.json` from `/plan-to-ralph`.
 
 **`/brainstorming-spec-review`** — Adversarial review of design specs using Codex as an independent reviewer. Sends the spec to Codex for rigorous review against a 10-category checklist, fixes CRITICAL and IMPORTANT findings, and loops until the spec passes with zero blocking issues (max 3 iterations). Designed to catch bugs, contradictions, ambiguities, and gaps that self-review misses due to author bias.
 
@@ -57,16 +55,14 @@ claude --plugin-dir ./claude-skills
 
 ## Usage
 
-After converting a plan or shape to `tasks/prd.json`:
+After converting a plan to `tasks/prd.json`:
 
 ```bash
 # Claude Code
 ${CLAUDE_PLUGIN_ROOT}/skills/plan-to-ralph/scripts/ralph.sh
-${CLAUDE_PLUGIN_ROOT}/skills/shape-to-ralph/scripts/ralph.sh
 
 # OpenAI Codex
 ${CLAUDE_PLUGIN_ROOT}/skills/plan-to-ralph/scripts/ralph-codex.sh --model o3
-${CLAUDE_PLUGIN_ROOT}/skills/shape-to-ralph/scripts/ralph-codex.sh --model o4-mini
 ```
 
 All scripts auto-detect the project root via `git rev-parse --show-toplevel`, so they work correctly from any location.
