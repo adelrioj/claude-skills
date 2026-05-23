@@ -9,7 +9,7 @@
       "name": "claude-skills",
       "source": "./",
       "description": "Shared skills for autonomous story execution using Ralph — plan-to-ralph and swarm-execute",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "keywords": [
         "ralph",
         "autonomous",
