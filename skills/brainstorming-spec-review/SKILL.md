@@ -31,12 +31,12 @@ Adversarial review of design specs using a local `pi` agent backed by qwen (LMSt
 
 1. If the user provided a file path as argument, use it
 2. Otherwise, scan `docs/superpowers/specs/` for the most recent spec by date prefix (YYYY-MM-DD). Match `*-design.md`
-3. If no spec found, ask the user for the path
+3. If no spec found, ask the user for the path (this is the only blocking question — without a spec there is nothing to review)
 
-Read the spec file and confirm with the user:
-> "I'll send `<spec-path>` to pi (local qwen via LMStudio) for adversarial review. Proceed?"
+Read the spec file, then announce and proceed immediately — do not wait for confirmation:
+> "Sending `<spec-path>` to pi (local qwen via LMStudio) for adversarial review."
 
-Wait for confirmation before continuing.
+This skill runs autonomously: it is a self-validator that hardens the spec *before* it reaches the user. Pausing for human approval at the start or between iterations defeats its purpose. Go straight to Step 2.
 
 ---
 
@@ -103,10 +103,7 @@ Present to the user:
 If PASS → go to Step 5.
 If NEEDS REVISION → go to Step 4.
 
-Show each CRITICAL and IMPORTANT finding (not MINOR) with its title, problem, and suggested fix. Ask:
-> "I'll fix these N issues now. Any you want to handle differently?"
-
-Wait for user response before fixing.
+List each CRITICAL and IMPORTANT finding (not MINOR) with its title, problem, and suggested fix so the run stays transparent, then go straight to Step 4 and fix them. Do not ask for approval before fixing — the autonomous fix/re-review loop is the core of the skill.
 
 ---
 
