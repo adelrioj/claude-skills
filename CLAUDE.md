@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A Claude Code plugin providing skills for autonomous story execution using "Ralph" — a loop that reads `tasks/prd.json` and drives Claude Code or OpenAI Codex through one user story per iteration — plus a spec review skill that hardens brainstorming design specs via adversarial Codex review.
+A Claude Code plugin providing skills for autonomous story execution using "Ralph" — a loop that reads `tasks/prd.json` and drives Claude Code or OpenAI Codex through one user story per iteration — plus two spec review skills that harden brainstorming design specs via adversarial review (one backed by OpenAI Codex, one by a local LMStudio model).
 
 ## Plugin Structure
 
@@ -13,7 +13,7 @@ This is a Claude Code plugin (`.claude-plugin/plugin.json`). Skills live under `
 - `scripts/` — Shell scripts (`ralph.sh` for Claude Code, `ralph-codex.sh` for OpenAI Codex)
 - `templates/` — Template files (`prd.json`, `progress.txt`, `findings.md`) with `{{PLACEHOLDER}}` syntax
 
-Hooks live at the plugin root under `hooks/hooks.json` — they are registered globally, not per-skill.
+If hooks are ever added, they live at the plugin root under `hooks/hooks.json` — they are registered globally, not per-skill. (The plugin currently ships no hooks; the former spec-review PostToolUse hook was removed.)
 
 ## Skills
 
@@ -23,10 +23,13 @@ Converts a Superpowers implementation plan into `tasks/prd.json`. Reads `docs/su
 ### `/swarm-execute`
 Parallel execution of `prd.json` stories using Claude Code Agent Teams. Performs dependency analysis (text scanning, file overlap, affordance cross-references), generates parallel batches, spawns teammates in worktrees, runs architect + QA review gates per story, and merges sequentially by priority.
 
-### `/brainstorming-spec-review`
-Adversarial review of design specs using `pi` (local qwen via LMStudio) as an independent reviewer. Sends the spec to `pi --print` with a 10-category review checklist, reads findings, fixes CRITICAL and IMPORTANT issues, and loops until the spec passes (max 3 iterations). Requires `pi` CLI in PATH and `lmstudio/qwen3.6-35b-a3b` loaded in LMStudio at `http://127.0.0.1:1234`. The reviewer is invoked with `--tools read,grep,find,ls,bash` so it can verify codebase references but cannot modify files.
+### `/spec-review-codex`
+Adversarial review of design specs using OpenAI Codex (`codex exec`) as an independent reviewer. Sends the spec with a 10-category review checklist, reads findings from a `/tmp` file Codex writes, fixes CRITICAL and IMPORTANT issues, and loops until the spec passes (max 3 iterations). Requires the `codex` CLI in PATH and authenticated. Codex is invoked with `--dangerously-bypass-approvals-and-sandbox` so it can read the codebase and write the findings file.
 
-A PostToolUse hook (`hooks/hooks.json`) automatically triggers this skill when brainstorming writes a spec file matching `specs/*-design.md`. The hook injects a systemMessage after the Write completes, so the review runs between brainstorming's self-review step and the user review step.
+### `/spec-review-local`
+Same review loop, but the reviewer is `pi` backed by whatever LLM is currently loaded in LMStudio at `http://127.0.0.1:1234` — the model id is auto-detected via LMStudio's `/api/v0/models` endpoint, never hardcoded. Requires `pi` CLI in PATH and a model loaded in LMStudio. The reviewer is invoked with `--tools read,grep,find,ls,bash` so it can verify codebase references but cannot modify files; findings are captured via stdout redirection.
+
+Both spec-review skills share the same review prompt (`spec-review-prompt.md`, duplicated per skill so each stays self-contained), the same severity model (CRITICAL/IMPORTANT/MINOR), and the same autonomous fix/re-review loop.
 
 ## Architecture: The Ralph Loop
 
