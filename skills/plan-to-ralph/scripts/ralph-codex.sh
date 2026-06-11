@@ -4,8 +4,8 @@ set -euo pipefail
 ###############################################################################
 # ralph-codex.sh — Autonomous coding loop for plan-driven stories (Codex)
 #
-# Codex-compatible version of ralph.sh. Uses codex CLI with full-auto
-# approval mode instead of Claude Code.
+# Codex-compatible version of ralph.sh. Uses codex CLI with approvals
+# and sandboxing bypassed (Ralph must write code) instead of Claude Code.
 #
 # Usage:
 #   ${CLAUDE_PLUGIN_ROOT}/skills/plan-to-ralph/scripts/ralph-codex.sh
