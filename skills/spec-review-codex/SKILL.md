@@ -1,21 +1,23 @@
 ---
-name: brainstorming-spec-review
-description: "Use when a brainstorming design spec has been written and needs adversarial review before implementation planning. Sends spec to a local pi agent (qwen via LMStudio) for rigorous review, fixes findings, and loops until no critical or important issues remain. Triggers on: review spec, spec review, validate spec, check spec quality, brainstorming review."
+name: spec-review-codex
+description: "Use when a brainstorming design spec has been written and needs adversarial review before implementation planning, using OpenAI Codex as the independent reviewer. Requires the codex CLI. Triggers on: spec review codex, codex spec review, review spec with codex, codex review, review spec, spec review."
 user-invocable: true
 ---
 
-# Spec Review via pi (local qwen)
+# Spec Review via Codex
 
-Adversarial review of design specs using a local `pi` agent backed by qwen (LMStudio) as an independent reviewer. Loops until the spec passes with zero CRITICAL and zero IMPORTANT findings.
+Adversarial review of design specs using Codex as an independent reviewer. Loops until the spec passes with zero CRITICAL and zero IMPORTANT findings.
 
-**Why a different agent:** The spec was written by this Claude instance. Self-review has author bias — the same blind spots that produced the issue prevent detecting it. The pi agent runs a different model (qwen3.6-35b-a3b via LMStudio at `http://127.0.0.1:1234`) with no shared conversation context, making it an effective adversarial reviewer. Pi has filesystem tools, so it verifies file paths and code references against the actual repo just like Codex did.
+**Why a different agent:** The spec was written by this Claude instance. Self-review has author bias — the same blind spots that produced the issue prevent detecting it. Codex is a fresh model with no shared conversation context, making it an effective adversarial reviewer. Codex has filesystem access, so it verifies file paths and code references against the actual repo.
+
+**Sibling skill:** `spec-review-local` does the same review with a local model served by LMStudio — use it when offline or when Codex is unavailable.
 
 ---
 
 ## The Job
 
 1. Locate the spec file
-2. Send to pi for adversarial review
+2. Send to Codex for adversarial review
 3. Read findings
 4. If verdict is NEEDS REVISION: fix the spec, loop back to step 2
 5. If verdict is PASS: report clean to user
@@ -23,7 +25,7 @@ Adversarial review of design specs using a local `pi` agent backed by qwen (LMSt
 
 **Do NOT** proceed to implementation planning until the spec passes review.
 
-**Prerequisite:** `pi` must be on PATH and `lmstudio/qwen3.6-35b-a3b` (or similarly named qwen model) must be loaded in LMStudio at `http://127.0.0.1:1234`. Verify with `pi --list-models | grep -i qwen` — abort with a clear error if no qwen model is listed.
+**Prerequisite:** `codex` must be on PATH and authenticated. Verify with `command -v codex` — abort with a clear error if missing.
 
 ---
 
@@ -34,25 +36,23 @@ Adversarial review of design specs using a local `pi` agent backed by qwen (LMSt
 3. If no spec found, ask the user for the path (this is the only blocking question — without a spec there is nothing to review)
 
 Read the spec file, then announce and proceed immediately — do not wait for confirmation:
-> "Sending `<spec-path>` to pi (local qwen via LMStudio) for adversarial review."
+> "Sending `<spec-path>` to Codex for adversarial review."
 
 This skill runs autonomously: it is a self-validator that hardens the spec *before* it reaches the user. Pausing for human approval at the start or between iterations defeats its purpose. Go straight to Step 2.
 
 ---
 
-## Step 2: Send to pi for Review
+## Step 2: Send to Codex for Review
 
-Build the pi command. The review prompt lives at `${CLAUDE_PLUGIN_ROOT}/skills/brainstorming-spec-review/spec-review-prompt.md`.
-
-The reviewer needs to read the spec and the codebase but **must not modify anything**, so restrict pi to read-only tools (`read,grep,find,ls,bash`). Capture pi's stdout into the findings file rather than asking the model to write the file itself.
+Build the Codex command. The review prompt lives at `${CLAUDE_PLUGIN_ROOT}/skills/spec-review-codex/spec-review-prompt.md`.
 
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
-REVIEW_PROMPT="${PLUGIN_ROOT}/skills/brainstorming-spec-review/spec-review-prompt.md"
+REVIEW_PROMPT="${PLUGIN_ROOT}/skills/spec-review-codex/spec-review-prompt.md"
 SPEC_FILE="<path-to-spec>"
 FINDINGS_FILE="/tmp/spec-review-findings-$(date +%s).md"
 
-PROMPT="$(cat "$REVIEW_PROMPT")
+codex exec --dangerously-bypass-approvals-and-sandbox "$(cat "$REVIEW_PROMPT")
 
 ---
 
@@ -65,23 +65,17 @@ $(cat "$SPEC_FILE")
 # Instructions
 
 1. Follow the review procedure above against this spec.
-2. Use the read/grep/find/ls/bash tools to verify all file paths, function names, and line numbers referenced in the spec against the actual codebase. The repository root is the current working directory.
-3. Output your complete findings to stdout (this conversation's response). Do not attempt to write files — you don't have write tools.
+2. Verify all file paths, function names, and line numbers referenced in the spec against the actual codebase. The repository root is the current working directory.
+3. Write your complete findings to: $FINDINGS_FILE — do not modify any other file.
 4. Use the exact output format specified in the review prompt.
 5. End with the Summary table and Verdict."
-
-pi --provider lmstudio \
-   --model qwen3.6-35b-a3b \
-   --tools read,grep,find,ls,bash \
-   --no-session \
-   --print "$PROMPT" > "$FINDINGS_FILE"
 ```
 
-Run this via Bash. The model's complete response (including findings and summary) lands in `$FINDINGS_FILE` via stdout capture.
+Run this via Bash. Codex writes findings to the temp file.
 
-**Timeout:** 600 seconds. A local 35B model is slower than hosted Codex; budget accordingly. If pi times out, report the timeout to the user and ask whether to retry or skip.
+**Timeout:** 120 seconds. If Codex times out, report the timeout to the user and ask whether to retry or skip.
 
-**On connection failure** (LMStudio not running, model not loaded): pi will exit non-zero. Report the exact stderr to the user and stop — do not loop.
+**On failure** (codex not authenticated, network error): codex will exit non-zero. Report the exact stderr to the user and stop — do not loop.
 
 ---
 
@@ -126,7 +120,7 @@ After all fixes are applied:
 
 ## Step 5: Report Clean
 
-When pi returns PASS:
+When Codex returns PASS:
 
 > "Spec passed adversarial review (iteration N/3, zero CRITICAL/IMPORTANT findings)."
 >

@@ -15,8 +15,9 @@
     "prd",
     "swarm",
     "agent-teams",
-    "brainstorming-spec-review",
+    "spec-review",
     "codex",
+    "lmstudio",
     "adversarial-review"
   ]
 }
