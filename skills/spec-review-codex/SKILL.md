@@ -46,13 +46,15 @@ This skill runs autonomously: it is a self-validator that hardens the spec *befo
 
 Build the Codex command. The review prompt lives at `${CLAUDE_PLUGIN_ROOT}/skills/spec-review-codex/spec-review-prompt.md`.
 
+The reviewer needs to read the spec and the codebase but **must not modify anything**, so run Codex with the read-only sandbox. Capture the findings via `--output-last-message` (which writes Codex's final message to the findings file) rather than asking the model to write the file itself.
+
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 REVIEW_PROMPT="${PLUGIN_ROOT}/skills/spec-review-codex/spec-review-prompt.md"
 SPEC_FILE="<path-to-spec>"
 FINDINGS_FILE="/tmp/spec-review-findings-$(date +%s).md"
 
-codex exec --dangerously-bypass-approvals-and-sandbox "$(cat "$REVIEW_PROMPT")
+codex exec --sandbox read-only --output-last-message "$FINDINGS_FILE" "$(cat "$REVIEW_PROMPT")
 
 ---
 
@@ -65,13 +67,13 @@ $(cat "$SPEC_FILE")
 # Instructions
 
 1. Follow the review procedure above against this spec.
-2. Verify all file paths, function names, and line numbers referenced in the spec against the actual codebase. The repository root is the current working directory.
-3. Write your complete findings to: $FINDINGS_FILE — do not modify any other file.
+2. Verify all file paths, function names, and line numbers referenced in the spec against the actual codebase. The repository root is the current working directory. You are sandboxed read-only — do not attempt to write or modify files.
+3. Your final message must be the complete findings document.
 4. Use the exact output format specified in the review prompt.
 5. End with the Summary table and Verdict."
 ```
 
-Run this via Bash. Codex writes findings to the temp file.
+Run this via Bash. Codex's final message (the findings) lands in `$FINDINGS_FILE` via `--output-last-message`.
 
 **Timeout:** 120 seconds. If Codex times out, report the timeout to the user and ask whether to retry or skip.
 
