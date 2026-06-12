@@ -1,7 +1,7 @@
 {
   "name": "claude-skills",
   "description": "Shared skills for autonomous story execution using Ralph — converts plans into prd.json and drives Claude Code or Codex through one user story per iteration",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "author": {
     "name": "adelrioj",
     "url": "https://github.com/adelrioj"
