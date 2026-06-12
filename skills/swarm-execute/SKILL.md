@@ -117,9 +117,10 @@ Batch 1 (parallel): US-001 [P1] <title> | US-005 [P5] <title>   — files: no ov
 Batch 2 (after 1):  US-002 [P2] <title> ← depends on US-001
 ...
 
-Workers: Claude agents in isolated worktrees, all code written by Codex
+Workers: Haiku agents in isolated worktrees, all code written by Codex
 (`codex exec --sandbox workspace-write`, foreground). Reviews: architect + QA
-per story, max 2 attempts, before merge.
+per story (performed by Codex read-only, verdicts translated by Haiku drivers),
+max 2 attempts, before merge.
 
 Proceed? [Y/adjust/cancel]
 ```
@@ -149,14 +150,16 @@ Workflow:
 What the script does per story (read it before first use; adapt a copy only if the project demands it):
 
 1. **Implement** — a worker agent in an isolated worktree (`isolation: 'worktree'`). The worker drives `codex exec --sandbox workspace-write` (foreground, from the worktree, prompt via stdin heredoc) for ALL code-writing, verifies Codex actually changed something (working tree OR new commits — Codex may self-commit), runs each gate individually, loops Codex on failures (max 3 fix invocations), commits, and returns a schema-enforced report: `{storyId, committed, branch, worktreePath, headSha, filesChanged, gates, summary, findings{decisions,errors,patterns}}`. The script retries once in a fresh worktree when the result is null, uncommitted, or has failing gates (the `committed` flag is cross-checked against the reported gate results, never trusted alone).
-2. **Review** — architect + QA agents in parallel; read-only by contract, non-isolated; they diff the persisted worktree via `git -C <worktreePath> diff <baseSha>..HEAD`. Schema-enforced verdicts with concrete fixes per blocker. Disjoint scopes (architect: conventions/architecture/security; QA: behavior coverage/assertion quality). A story passes ONLY when both reviewers returned a verdict and both verdicts are `pass` — a dead reviewer is retried once, then the story is blocked (a missing verdict never becomes a pass); a `blocked` verdict without actionable blockers also blocks (remediation would be impossible).
+2. **Review** — architect + QA driver agents in parallel; read-only by contract, non-isolated. The review itself is performed by Codex: each driver runs `codex exec --sandbox read-only --output-last-message /tmp/swarm-review-b<batch>-<storyId>-<reviewer>-<attempt>.md` from the persisted worktree, with the lens checklist and the `<baseSha>..HEAD` diff instructions composed into the Codex prompt. The driver then sanity-checks Codex's findings against the actual diff (findings citing files outside it, or code that doesn't exist, are dropped) and translates the survivors into the schema-enforced verdict with a concrete fix per blocker. Disjoint scopes (architect: conventions/architecture/security; QA: behavior coverage/assertion quality). If Codex returns nothing twice, the driver reviews directly and flags it in the summary. A story passes ONLY when both reviewers returned a verdict and both verdicts are `pass` — a dead reviewer is retried once, then the story is blocked (a missing verdict never becomes a pass); a `blocked` verdict without actionable blockers also blocks (remediation would be impossible).
 3. **Remediate** — if blocked: one non-isolated agent operating **inside the persisted worktree path** (never a fresh worktree — a fresh copy lacks the implementation) drives Codex to fix only the blockers, re-runs gates, commits. Then re-review. Hard cap: 2 review attempts total.
 
 The workflow returns `{batch, results: [{storyId, status: pass|blocked|failed, impl, reviews, attempts, blockers?, orphanedWorktrees}]}`.
 
-**Codex invocation rules baked into the script (keep them if you adapt it):** foreground only, `--sandbox workspace-write` (never `--dangerously-bypass-approvals-and-sandbox`), never resume sessions — no `codex exec resume` / `resume --last`, and no companion `task --resume-last`/`--background` (parallel workers can resume each other's threads; background jobs die with the session) — one Codex invocation at a time per worktree, instruct Codex to leave changes uncommitted (the worker commits), and always verify changes landed via `git diff --name-only <baseSha>` (covers working tree AND any self-made commits) — a write-incapable or confused Codex run "succeeds" with advice text instead of edits. Codex's sandbox has **no network**: workers run package-manager installs themselves, then re-invoke Codex.
+**Codex invocation rules baked into the script (keep them if you adapt it):** foreground only, `--sandbox workspace-write` for code-writing and `--sandbox read-only` for reviews (never `--dangerously-bypass-approvals-and-sandbox`), never resume sessions — no `codex exec resume` / `resume --last`, and no companion `task --resume-last`/`--background` (parallel workers can resume each other's threads; background jobs die with the session) — one Codex invocation at a time per worktree, instruct Codex to leave changes uncommitted (the worker commits), and always verify changes landed via `git diff --name-only <baseSha>` (covers working tree AND any self-made commits) — a write-incapable or confused Codex run "succeeds" with advice text instead of edits. Codex's sandbox has **no network**: workers run package-manager installs themselves, then re-invoke Codex.
 
-**Determinism rules:** no timestamps or randomness inside the script (banned by the Workflow runtime). All labels derive from story IDs (`impl:US-001`, `arch:US-001#1`). Anything wall-clock goes in via `args`.
+**Determinism rules:** no timestamps or randomness inside the script (banned by the Workflow runtime). All labels derive from story IDs (`impl:US-001`, `arch:US-001#1`); review findings files derive from batch/story/reviewer/attempt, never timestamps. Anything wall-clock goes in via `args`.
+
+**Model assignment (cost):** all in-workflow agents — implementation workers, review drivers, remediation — run on Haiku (`model: 'haiku'` in the script). They are process-followers: Codex does the code-level thinking on both the write path (`workspace-write`) and the review path (`read-only`), and the schemas plus step-by-step procedures keep the cheap drivers on rails. If review verdicts look mistranslated or workers mishandle gate failures in a given project, bump the relevant `model` in an adapted copy of the script — never silently; note it to the user.
 
 ---
 
@@ -226,7 +229,7 @@ Codex invocations: ~<sum of reported codexInvocations — approximate; the field
 3. **Merging is lead-only and sequential by priority.** No merge agents, no parallel merges.
 4. **Conservative dependency analysis** — when uncertain, serialize.
 5. **No external state files.** Story table, batch plan, merge ledger, findings digest: conversation memory. Recovery: git history + persisted worktrees.
-6. **Reviews gate merges** — architect + QA per story, max 2 attempts, then escalate. Reviewers are read-only and never get worktree isolation; remediation always targets the persisted worktree path.
+6. **Reviews gate merges** — architect + QA per story (Codex performs the review via `--sandbox read-only`; driver agents verify and translate findings), max 2 attempts, then escalate. Reviewers are read-only and never get worktree isolation; remediation always targets the persisted worktree path.
 7. **Gates run per-worker AND post-merge**, individually, never `&&`-joined. E2E only at final validation.
 8. **Codex discipline**: foreground, `--sandbox workspace-write`, never resume sessions (`codex exec resume`, companion `task --resume-last`/`--background`), verify changes via `git diff --name-only <baseSha>`, workers run package installs themselves (Codex has no network).
 9. **User approves the plan** before any worker spawns; `adjust` is first-class.

@@ -3,7 +3,7 @@ export const meta = {
   description: 'Execute one batch of stories in parallel: Codex implements in worktrees, architect+QA reviews gate each story',
   phases: [
     { title: 'Implement', detail: 'one Codex-driven worker per story, each in its own worktree' },
-    { title: 'Review', detail: 'architect + QA review per story, structured verdicts' },
+    { title: 'Review', detail: 'architect + QA lenses per story, each review performed by Codex read-only and translated into a structured verdict' },
     { title: 'Remediate', detail: 'Codex fixes blockers inside the persisted worktree, then re-review' },
   ],
 }
@@ -58,6 +58,7 @@ const REVIEW_SCHEMA = {
   },
 }
 
+if (typeof args === 'string') { args = JSON.parse(args) }
 const gateList = args.gates.map((g, i) => `${i + 1}. \`${g}\``).join('\n')
 
 function siblingSummary(story) {
@@ -124,41 +125,51 @@ ${gateList}
 }
 
 function reviewerPrompt(story, impl, reviewer, attempt) {
-  const lens = reviewer === 'architect'
-    ? `You are the ARCHITECT reviewer. Scope: conventions, architecture, security. Check for:
+  const checklist = reviewer === 'architect'
+    ? `Scope: conventions, architecture, security. Check for:
 - Convention violations vs the surrounding codebase (naming, structure, import style, framework idioms)
 - Missing or inconsistent error handling on new code paths
 - Code duplication that should reuse existing helpers
 - Needless complexity (layers, abstractions, options the story did not ask for)
 - Security issues (injection, unvalidated input, secrets, unsafe defaults)
 Do NOT review test adequacy or functional coverage — that is the QA reviewer's scope.`
-    : `You are the QA reviewer. Test existence != test adequacy. Scope: functional correctness and test quality. Check:
+    : `Scope: functional correctness and test quality. Test existence != test adequacy. Check:
 - Enumerate every new/changed behavior in the diff; verify each has a test
 - Edge cases and error paths: are failures, empty inputs, and boundaries tested?
 - Assertion quality: do tests assert outcomes, or merely that nothing threw?
 - Mock accuracy: do mocks match the real collaborators' contracts?
 - Would the tests catch a plausible regression of this change?
 Do NOT review conventions, naming, structure, or security — that is the architect's scope.`
-  return `${lens}
+  const outFile = `/tmp/swarm-review-b${args.batch}-${story.id}-${reviewer}-${attempt}.md`
+  return `You are the ${reviewer.toUpperCase()} review driver for one story. The review itself is performed by the OpenAI Codex CLI — your job is to compose its prompt, run it, sanity-check its findings, and translate them into a structured verdict. You never review the code yourself except in the fallback below.
 
-You are READ-ONLY. You run in the main repository, NOT in the worker's worktree. Never modify any file anywhere. Review attempt ${attempt} of 2.
+You are READ-ONLY with respect to the repository. You run in the main repository, NOT in the worker's worktree. Never modify any repo file anywhere (Codex writing ${outFile} is expected). Review attempt ${attempt} of 2.
 
 # Story under review
 ${storyHeader(story)}
 
-# How to read the change
-The implementation lives in a persisted worktree at: ${impl.worktreePath} (branch ${impl.branch}, HEAD ${impl.headSha}).
-Diff it against the batch base without checking anything out:
-\`\`\`bash
-git -C "${impl.worktreePath}" diff ${args.baseSha}..HEAD
-git -C "${impl.worktreePath}" diff --name-only ${args.baseSha}..HEAD
-\`\`\`
-Read full files for context via \`git -C "${impl.worktreePath}" show HEAD:<path>\` or by reading ${impl.worktreePath}/<path> directly.
+# Where the change lives
+Persisted worktree: ${impl.worktreePath} (branch ${impl.branch}, HEAD ${impl.headSha}). Diff base: ${args.baseSha}.
+
+# Procedure
+1. Run Codex FROM the worktree (foreground, read-only sandbox, prompt via stdin heredoc; never resume sessions):
+   \`\`\`bash
+   cd "${impl.worktreePath}" && codex exec --sandbox read-only --output-last-message ${outFile} - <<'PROMPT'
+   <review prompt>
+   PROMPT
+   \`\`\`
+   Compose the review prompt yourself. It MUST contain:
+   - The story, acceptance criteria, and planned files from the assignment above
+   - Instructions to inspect the change via \`git diff ${args.baseSha}..HEAD\` (and \`--name-only\`) and to read full files for context
+   - This checklist, verbatim:
+${checklist}
+   - Output rules: one finding per line, format \`SEVERITY | file:line | issue | concrete fix\` where SEVERITY is BLOCKER or SUGGESTION. BLOCKER only for issues a reasonable senior reviewer would refuse to merge; style nits are SUGGESTION. ${reviewer === 'qa' ? 'For missing coverage, the fix must state the specific test to write. ' : ''}Every fix must be concrete — never "needs fixing" without how. If nothing is found, output exactly NO FINDINGS.
+2. Read ${outFile}. If it is missing or empty, re-run Codex once. If that also fails, perform the review YOURSELF with the same checklist (\`git -C "${impl.worktreePath}" diff ${args.baseSha}..HEAD\`; read full files via \`git -C "${impl.worktreePath}" show HEAD:<path>\`) and state in your summary that Codex was unavailable.
+3. Sanity-check before adopting findings — Codex output is input, not verdict: discard any finding naming a file absent from \`git -C "${impl.worktreePath}" diff --name-only ${args.baseSha}..HEAD\` (unless you verify it is a genuine cross-file concern), and spot-check that each BLOCKER cites code that actually exists at the stated location. Drop anything you cannot verify.
 
 # Verdict rules
-- "pass": zero blockers. Suggestions are informational only.
+- "pass": zero surviving blockers. Suggestions are informational only.
 - "blocked": one or more blockers. Every blocker must name a file (and line where possible) and a CONCRETE fix${reviewer === 'qa' ? ' — for missing coverage, state the specific test to write' : ''} — never "needs fixing" without how.
-- Only block on issues a reasonable senior reviewer would refuse to merge. Style nits are suggestions.
 
 Return structured output with storyId="${story.id}" and reviewer="${reviewer}".`
 }
@@ -198,6 +209,7 @@ async function implementStory(story, attempt) {
     phase: 'Implement',
     isolation: 'worktree',
     schema: IMPL_SCHEMA,
+    model: 'haiku', // babysitter role: Codex does the code-level thinking; the schema + procedure keep the driver on rails
   })
   return impl
 }
@@ -209,10 +221,10 @@ function implOk(impl) {
 
 async function runReview(story, impl, reviewer, tag, attempt) {
   // One retry if the reviewer agent dies — a missing verdict must never become a pass.
-  let r = await agent(reviewerPrompt(story, impl, reviewer, attempt), { label: `${tag}:${story.id}#${attempt}`, phase: 'Review', schema: REVIEW_SCHEMA })
+  let r = await agent(reviewerPrompt(story, impl, reviewer, attempt), { label: `${tag}:${story.id}#${attempt}`, phase: 'Review', schema: REVIEW_SCHEMA, model: 'haiku' })
   if (!r) {
     log(`${story.id}: ${reviewer} reviewer died on attempt ${attempt} — retrying once`)
-    r = await agent(reviewerPrompt(story, impl, reviewer, attempt), { label: `${tag}:${story.id}#${attempt}-retry`, phase: 'Review', schema: REVIEW_SCHEMA })
+    r = await agent(reviewerPrompt(story, impl, reviewer, attempt), { label: `${tag}:${story.id}#${attempt}-retry`, phase: 'Review', schema: REVIEW_SCHEMA, model: 'haiku' })
   }
   return r
 }
@@ -260,7 +272,7 @@ async function runStory(story) {
       return { storyId: story.id, status: 'blocked', impl, reviews, attempts: attempt, blockers, orphanedWorktrees: orphans }
     }
     log(`${story.id}: ${blockers.length} blocker(s) — remediating in ${impl.worktreePath}`)
-    const fix = await agent(remediationPrompt(story, impl, blockers), { label: `fix:${story.id}`, phase: 'Remediate', schema: IMPL_SCHEMA })
+    const fix = await agent(remediationPrompt(story, impl, blockers), { label: `fix:${story.id}`, phase: 'Remediate', schema: IMPL_SCHEMA, model: 'haiku' })
     if (implOk(fix)) {
       impl = { ...impl, headSha: fix.headSha, filesChanged: fix.filesChanged, gates: fix.gates,
         codexInvocations: (impl.codexInvocations ?? 0) + (fix.codexInvocations ?? 0),
