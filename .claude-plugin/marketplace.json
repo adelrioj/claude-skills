@@ -8,15 +8,16 @@
     {
       "name": "claude-skills",
       "source": "./",
-      "description": "Shared skills for autonomous story execution using Ralph — plan-to-ralph and swarm-execute",
-      "version": "1.0.7",
+      "description": "Shared skills for autonomous story execution using Ralph — plan-to-ralph, swarm-execute, and plan-to-dex (dex orchestrator)",
+      "version": "1.1.0",
       "keywords": [
         "ralph",
         "autonomous",
         "stories",
         "prd",
         "swarm",
-        "agent-teams"
+        "agent-teams",
+        "dex"
       ],
       "category": "productivity"
     }
