@@ -20,7 +20,7 @@ The plan is the **source of truth**. Do NOT re-interview the user, regenerate re
 2. Translate plan tasks into a dex checkbox-group `plan.md`
 3. Preflight (dex + codex on PATH; branch guard)
 4. One confirmation before the autonomous chain
-5. Run `dex import` → `dex apply --cli codex` → `dex review --cli codex`
+5. Run `dex import` → `dex --cli codex apply` → `dex --cli codex review`
 6. Show the handoff report
 
 **Output file:** `tasks/dex-plan.md` — the translated plan, then installed by `dex import` into `.dex/plan.md`.
@@ -104,7 +104,8 @@ If a verification step requires human judgment ("inspect the output", "if WARN l
 
 1. **`dex` on PATH:** `command -v dex` — else STOP: "dex not found. Install: `curl -sSfL https://raw.githubusercontent.com/francescoalemanno/dex/main/install.sh | bash`".
 2. **`codex` on PATH:** `command -v codex` — else STOP: "codex CLI not found; this skill runs dex with the codex backend."
-3. **Branch guard:** get the current branch (`git rev-parse --abbrev-ref HEAD`). If it is `main` or `master`, resolve a feature branch (use a name the user provided, else ask for one) and `git switch -c <name>` before any `dex apply`. `dex apply` auto-commits across iterations — those commits must land on a throwaway branch, never `main`/`master`.
+3. **`--cli` flag form:** `dex --cli codex --help` should exit 0 — confirms `--cli` is accepted as a global option (the form Step 6 uses). If this fails, a future dex version may have moved `--cli` under the subcommand; run `dex --help` to check and adjust the Step 6 commands accordingly. (Validated against dex 0.4.9, where `--cli` is global.)
+4. **Branch guard:** get the current branch (`git rev-parse --abbrev-ref HEAD`). If it is `main` or `master`, resolve a feature branch (use a name the user provided, else ask for one) and `git switch -c <name>` before any `dex apply`. `dex apply` auto-commits across iterations — those commits must land on a throwaway branch, never `main`/`master`.
 
 ## Step 5: Confirm
 
@@ -132,9 +133,11 @@ Run these in order, streaming output. Do NOT set `--model`; do NOT edit `.dex/co
 
 ```bash
 dex import --force tasks/dex-plan.md
-dex apply --cli codex
-dex review --cli codex
+dex --cli codex apply
+dex --cli codex review
 ```
+
+`--cli` is a **global** dex option (validated against dex 0.4.9) and must precede the subcommand — `dex --cli codex apply`, not `dex apply --cli codex` (the latter errors with `Unrecognized argument: --cli`). `dex import` takes a path arg and needs no `--cli`.
 
 - If `dex apply` prints `STALEMATE` or exits non-zero, STOP — report dex's output verbatim and do NOT run `dex review`.
 - If `dex import` fails validation, STOP and show the error (the translated file lacks an open checkbox — a translation bug).
