@@ -32,7 +32,7 @@ Adversarial review of design specs using OpenAI Codex (`codex exec`) as an indep
 ### `/spec-review-local`
 Same review loop, but the reviewer is `pi` backed by whatever LLM is currently loaded in LMStudio at `http://127.0.0.1:1234` — the model id is auto-detected via LMStudio's `/api/v0/models` endpoint, never hardcoded. Requires `pi` CLI in PATH and a model loaded in LMStudio. The reviewer is invoked with `--tools read,grep,find,ls,bash` so it can verify codebase references but cannot modify files; findings are captured via stdout redirection.
 
-Both spec-review skills share the same review prompt (`spec-review-prompt.md`, duplicated per skill so each stays self-contained), the same severity model (CRITICAL/IMPORTANT/MINOR), and the same autonomous fix/re-review loop.
+Both spec-review skills share the same review prompt (`spec-review-prompt.md`, duplicated per skill so each stays self-contained — keep the two copies byte-identical), the same severity model (CRITICAL/IMPORTANT/ADVISORY/MINOR), and the same autonomous fix/re-review loop. The prompt classifies the spec by *altitude* (design vs detailed-implementation): for a design spec, a coverage rule anchored on a named source of truth (characterization suite, golden master, referenced source range) counts as complete, so enumeration-completeness observations are ADVISORY (non-blocking), not IMPORTANT. Only CRITICAL and IMPORTANT block PASS and drive the loop.
 
 ## Architecture: The Ralph Loop
 
@@ -73,5 +73,6 @@ Distributed via marketplace (`marketplace.json`). Install/update/uninstall comma
 - Swarm workers delegate ALL code-writing to `codex exec --sandbox workspace-write`, and swarm reviewers delegate review to `codex exec --sandbox read-only` (findings file at `/tmp/swarm-review-b<batch>-<storyId>-<reviewer>-<attempt>.md` via `--output-last-message`) — foreground only, never `--background`, `--resume-last`, or `--dangerously-bypass-approvals-and-sandbox`
 - Only the swarm lead merges, sequentially by priority, between Workflow invocations — never agents, never in parallel
 - Spec review findings are written to `/tmp/spec-review-findings-<timestamp>.md` — preserved for audit, never committed to the repo
-- The spec review loop caps at 3 iterations to prevent infinite fix/re-break cycles
+- The spec review loop caps at 3 iterations to prevent infinite fix/re-break cycles, and also stops early as PASS-with-notes if successive iterations' IMPORTANT findings converge on finer-grained enumeration of the same concern rather than new substance (enumeration-creep detection)
+- Spec review verdicts are altitude-calibrated: PASS requires zero CRITICAL and zero IMPORTANT; ADVISORY/MINOR never block. Findings that demand a design spec re-enumerate detail a named source of truth already pins must be reframed as a coverage rule (with a `Decision:` note), not enumerated — the altitude analogue of "never change the architectural approach"
 - Hooks live in `hooks/hooks.json` at the plugin root — the plugin system does not discover hooks nested inside skill directories

@@ -122,27 +122,34 @@ Present to the user:
 > |----------|-------|
 > | CRITICAL | X |
 > | IMPORTANT | X |
+> | ADVISORY | X |
 > | MINOR | X |
 >
+> **Spec altitude:** design / detailed-implementation
 > **Verdict:** PASS / NEEDS REVISION
 
-If PASS → go to Step 6.
+If PASS → go to Step 6. (ADVISORY/MINOR findings may remain on a PASS — surface them as notes, do not loop on them.)
 If NEEDS REVISION → go to Step 5.
 
-List each CRITICAL and IMPORTANT finding (not MINOR) with its title, problem, and suggested fix so the run stays transparent, then go straight to Step 5 and fix them. Do not ask for approval before fixing — the autonomous fix/re-review loop is the core of the skill.
+List each CRITICAL and IMPORTANT finding (not ADVISORY or MINOR) with its title, problem, and suggested fix so the run stays transparent, then go straight to Step 5 and fix them. Do not ask for approval before fixing — the autonomous fix/re-review loop is the core of the skill. **Only CRITICAL and IMPORTANT findings drive the loop**; ADVISORY and MINOR are reported, never fixed-and-re-reviewed.
 
 ---
 
 ## Step 5: Fix and Loop
 
-For each finding (CRITICAL first, then IMPORTANT):
+For each finding (CRITICAL first, then IMPORTANT — ignore ADVISORY and MINOR here):
 
 1. Read the quoted spec text from the finding
 2. Read the suggested fix
-3. Apply the fix using Edit tool
-4. Briefly note what was changed
+3. Decide **comply vs reframe** (see Fixing Guidelines): a normal finding gets the fix applied with the Edit tool; an *altitude* finding (one demanding the spec transcribe detail a named source of truth already pins) gets **reframed** into a coverage rule, not enumerated
+4. Apply the edit and briefly note what was changed
 
-After all fixes are applied:
+**Convergence / enumeration-creep check (before re-running):** Compare this iteration's IMPORTANT findings to the previous iteration's. If they are the same category AND merely finer-grained versions of the same underlying concern (e.g. round 2 said "enumerate the error branches," round 3 says "enumerate even more error branches"), the loop is ratcheting on altitude, not substance. Stop early and report:
+> "Findings are converging on enumeration detail, not substance. The design appears sound; the remaining findings are altitude disagreements better treated as ADVISORY. Treating as PASS with notes."
+
+Then go to Step 6 — this is a PASS-with-notes outcome, **not** a max-iteration failure.
+
+Otherwise, after all fixes are applied:
 - Increment the iteration counter
 - If iteration < 3 → go back to Step 3
 - If iteration = 3 → report to user:
@@ -174,6 +181,7 @@ When fixing findings:
 - **IMPORTANT (missing edge cases):** Add to the relevant section. If there's an edge cases table, add rows. If not, add a bullet list.
 - **Never remove content to fix a finding.** Clarify, correct, or expand instead.
 - **Never change the architectural approach** to fix a finding. If a finding suggests the approach is wrong, flag it to the user instead of changing it.
+- **Reframe, don't comply, on altitude findings.** If a finding asks the spec to transcribe implementation detail (enumerate more branches, cases, or guard returns) that a *named external source of truth* already pins — a characterization suite, golden master, or referenced source range — do NOT enumerate. Instead reframe the requirement as a coverage *rule* pointing at that source, and add a one-line `Decision:` note recording the choice. This is the altitude analogue of "never change the architectural approach": the reviewer is pushing the spec to the wrong altitude, and the right response is to reframe, not obey. If the finding was already ADVISORY, no spec edit is needed at all — just note it.
 
 ---
 
@@ -185,5 +193,6 @@ Track across iterations:
 - `model`: The LMStudio model id detected in Step 2
 - `findings_files`: List of findings file paths (for audit trail)
 - `fixed_count`: Total findings fixed across all iterations
+- `important_categories`: The set of categories of this iteration's IMPORTANT findings — compared against the previous iteration to detect enumeration creep (Step 5 convergence check)
 
 All findings files are preserved in `/tmp/` for the user to inspect after the review completes.
