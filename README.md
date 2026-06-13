@@ -6,6 +6,8 @@ A [Claude Code](https://claude.com/claude-code) plugin with shared skills for au
 
 **`/plan-to-ralph`** — Convert a Superpowers implementation plan into Ralph's `prd.json` format. Maps plan tasks to user stories with machine-verifiable acceptance criteria, injects quality gates, and seeds cross-iteration context.
 
+**`/plan-to-dex`** — Run a hardened Superpowers plan through the [dex](https://github.com/francescoalemanno/dex) orchestrator instead of the Ralph loop. Translates the plan into dex's checkbox-group `plan.md` (one task = one iteration), imports it, and runs `dex apply` → `dex review` autonomously with codex as the fixed backend. Requires the `dex` and `codex` CLIs.
+
 **`/swarm-execute`** — Implement a feature as parallel user stories: Claude orchestrates via the Workflow (ultracode) tool, Codex workers write all code in isolated worktrees, architect + QA reviews gate every merge. Takes a plain-language request or a plan/spec file directly — no `prd.json` or `tasks/` files. Requires the `codex` CLI.
 
 **`/spec-review-codex`** — Adversarial review of design specs using OpenAI Codex as an independent reviewer. Sends the spec to Codex for rigorous review against a 10-category checklist, fixes CRITICAL and IMPORTANT findings, and loops until the spec passes with zero blocking issues (max 3 iterations). Designed to catch bugs, contradictions, ambiguities, and gaps that self-review misses due to author bias.

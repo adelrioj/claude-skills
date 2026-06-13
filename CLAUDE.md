@@ -20,6 +20,9 @@ If hooks are ever added, they live at the plugin root under `hooks/hooks.json` �
 ### `/plan-to-ralph`
 Converts a Superpowers implementation plan into `tasks/prd.json`. Reads `docs/superpowers/plans/` for plan files (5.1.0+ default), falling back to `docs/plans/` for legacy repos. Outputs `tasks/prd.json`, `tasks/progress.txt`, `tasks/findings.md`.
 
+### `/plan-to-dex`
+Translates a Superpowers implementation plan into a [dex](https://github.com/francescoalemanno/dex)-compatible `plan.md`, imports it via `dex import`, and runs dex's `apply`/`review` loop end to end. Backend is fixed to codex (`dex --cli codex`); the skill sets no model and never writes `.dex/config.json`. One source Task = one `### Task N:` heading = one dex iteration. Output: `tasks/dex-plan.md`. Requires the `dex` and `codex` CLIs. Refuses to run `dex apply` on `main`/`master` — resolves a feature branch first.
+
 ### `/swarm-execute`
 Parallel feature implementation orchestrated by Claude via the Workflow (ultracode) tool, with all story code written by Codex workers. Takes a plain-language request or a plan/spec file directly — no `prd.json` or `tasks/` files; all state lives in conversation memory and git. The lead decomposes into stories, runs dependency analysis (declared deps, file overlap, cross-references), batches conflict-free, then invokes one Workflow per batch from the static script `skills/swarm-execute/templates/swarm-workflow.js` (parameterized entirely via `args`). Each story: Codex-driven implementation in an isolated worktree → architect + QA review, itself performed by Codex (`--sandbox read-only`) with driver agents translating findings into schema-enforced verdicts → one remediation pass in the persisted worktree → re-review (max 2 attempts). All in-workflow agents run on Haiku — they are process-followers; Codex does the code-level thinking. The lead merges sequentially by priority between workflow invocations. Requires the `codex` CLI.
 
@@ -61,6 +64,7 @@ Distributed via marketplace (`marketplace.json`). Install/update/uninstall comma
 
 - `${CLAUDE_PLUGIN_ROOT}` resolves to the plugin install path at runtime — always use this in script references shown to users
 - Scripts auto-detect project root via `git rev-parse --show-toplevel`
+- `/plan-to-dex` pins the dex backend to codex and never writes `.dex/config.json` — the model is codex's own default; dex owns all execution state under `.dex/`
 - Quality gate commands are never hardcoded — Ralph reads them from `prd.json.qualityGates`; swarm-execute detects them from the repo (CI config → package.json scripts → ecosystem files → CLAUDE.md) and runs them as individual commands, never `&&`-joined
 - `e2eCommand` in prd.json is optional; omit the field entirely if not detected (never set to null/empty). Same rule for swarm-execute's detected e2e command — it runs only at final validation
 - Shell scripts use `set -euo pipefail` and require `jq` for JSON parsing
