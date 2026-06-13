@@ -53,7 +53,52 @@ If validation fails, list what is missing and ask whether to proceed. **Never in
 
 ## Step 3: Translate to dex plan.md
 
-<!-- filled in Task 4 -->
+Read the template at `${CLAUDE_PLUGIN_ROOT}/skills/plan-to-dex/templates/dex-plan.md` and write the result to `tasks/dex-plan.md` (`mkdir -p tasks` first).
+
+**Granularity rule:** one source `### Task N: Component` = one dex `### Task N: Component` heading = **one dex iteration**. dex hands the entire group body (heading + checkboxes + prose) to codex at once. The 5 TDD sub-steps inside a task become **checkboxes under that heading** — never separate headings.
+
+For each source Task, emit one group following this mapping:
+
+| Source plan element            | → dex `plan.md`                                            |
+| ------------------------------ | --------------------------------------------------------- |
+| `### Task N: Component` heading  | `### Task N: Component` heading (one group = one iteration) |
+| TDD sub-steps (test→fail→impl→pass→commit) | `- [ ]` checkboxes under that heading            |
+| `**Files:**` block               | preserved as a `**Files:**` prose line (codex context)    |
+| `Run:` / `Expected:` lines       | folded into the relevant checkbox text                    |
+| Detected quality gates           | a `- [ ] Quality gates: <cmds> pass` checkbox per task    |
+| `[manual]` verification step     | `- [ ] [manual] ...` checkbox, surfaced in the confirmation |
+| Plan `**Goal:**`                 | the `## Overview` context group (no checkbox)             |
+
+Example of one emitted group:
+
+```markdown
+### Task 3: Auth guard
+
+**Files:** Create `src/auth/guard.ts`, Modify `src/router.ts`, Test `tests/auth/guard.test.ts`
+
+- [ ] Write failing test in `tests/auth/guard.test.ts` — `pnpm test tests/auth/guard.test.ts` should FAIL
+- [ ] Implement guard in `src/auth/guard.ts` so the test passes
+- [ ] Verify `pnpm test tests/auth/guard.test.ts` PASSES
+- [ ] Quality gates: `pnpm typecheck` and `pnpm lint` pass
+- [ ] Commit
+```
+
+### Quality-gate detection
+
+Detect project quality tooling and append a `Quality gates:` checkbox to **every** task:
+
+| File             | Check for                           | Quality-gate commands              |
+| ---------------- | ----------------------------------- | ---------------------------------- |
+| `package.json`   | `typecheck`, `lint`, `test` scripts | `pnpm typecheck`, `pnpm lint`, …   |
+| `Makefile`       | `test`, `lint`, `typecheck` targets | `make typecheck`, …                |
+| `pyproject.toml` | `pytest`, `ruff`, `mypy`            | `pytest`, `ruff check`, …          |
+| `Cargo.toml`     | —                                   | `cargo test`, `cargo clippy`       |
+
+If no tooling is detected, ask: "What commands must pass for every task?" Unlike `/plan-to-ralph`, do **not** write a top-level array — dex has no equivalent; codex just runs the commands named in the checkbox.
+
+### Manual criteria
+
+If a verification step requires human judgment ("inspect the output", "if WARN lines appear…"), emit it as `- [ ] [manual] <text>` and list every `[manual]` checkbox in the Step 5 confirmation, so the user knows codex will tick it without true verification.
 
 ## Step 4: Preflight Checks
 
