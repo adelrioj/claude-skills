@@ -42,15 +42,28 @@ agent reads `Expected:` prose, unlike Ralph's bash loop). The result is a skill
 roughly one-third the weight of `/plan-to-ralph`.
 
 **Tech stack:** Markdown skill (`SKILL.md`) + one template; the `dex` CLI is the
-runtime (no shell scripts of our own). Requires the `dex` binary on PATH plus at
-least one supported coding CLI (`codex`, `claude`, or `pi`-for-LMStudio).
+runtime (no shell scripts of our own). Requires the `dex` binary and the `codex`
+binary on PATH. **The skill drives dex with `--cli codex`** — codex is the fixed
+backend.
 
 ## Tech Stack
 
 - `dex` CLI (`dex import`, `dex apply`, `dex review`, `dex finalize`)
-- A coding CLI driver selected via dex's `--cli` flag: `codex`, `claude`, or
-  `pi` (LMStudio-backed, local)
+- `codex` CLI as the fixed backend (dex invoked with `--cli codex`)
 - Claude Code plugin skill format (`SKILL.md` frontmatter + body)
+
+### Backend & model decision (fixed)
+
+- **Backend is pinned to codex.** The skill always passes `--cli codex`; it does
+  not ask which backend to use and does not rely on dex's auto-detect (which
+  defaults to `opencode`). An optional `--cli <other>` override may be accepted
+  for power users, but codex is the default and the documented path.
+- **The model is codex's own default.** The skill does **not** set a `--model`
+  flag and does **not** write `.dex/config.json`. dex runs codex with its
+  built-in args (`codex exec --yolo --ephemeral --json`); whichever model the
+  user's codex install/config defaults to is the model that runs. Pinning a
+  specific model is the user's responsibility via their codex setup (or a manual
+  `.dex/config.json` edit), explicitly out of scope for the skill.
 
 ---
 
@@ -69,15 +82,15 @@ No `scripts/` directory — dex is the execution runtime.
 ### Invocation
 
 ```
-/plan-to-dex [plan-path] [--cli codex|claude|pi]
+/plan-to-dex [plan-path]
 ```
 
 - `plan-path` (optional): explicit path to a Superpowers plan. If omitted, the
   skill scans for the most recent plan (same logic as plan-to-ralph Step 1).
-- `--cli` (optional): dex backend driver. If omitted, the skill **asks** which
-  backend to use (codex / LMStudio-via-pi / claude), since the choice is
-  consequential; only if the user explicitly defers does it fall through to
-  dex's own auto-detect. Once chosen, passed through to every `dex` invocation.
+- **Backend:** always `--cli codex` — not a prompt, not auto-detect. (An
+  optional `--cli <other>` override may be accepted, but codex is the default.)
+- **Model:** codex's own default — the skill sets no `--model` and never writes
+  `.dex/config.json`.
 
 ---
 
@@ -95,24 +108,24 @@ No `scripts/` directory — dex is the execution runtime.
 
 3. **Preflight checks** —
    - `dex` present on PATH (else STOP with install hint).
-   - Chosen `--cli` binary present (`which`); if `--cli pi`, warn that LMStudio
-     must be running at `http://127.0.0.1:1234` with a model loaded.
+   - `codex` present on PATH (`which codex`); else STOP naming the missing
+     binary.
    - **Branch guard:** if the current git branch is `main`/`master`, resolve a
      feature branch (use a provided name, else ask) and switch to it before any
      `dex apply`. `dex apply` auto-commits across iterations; those commits must
      land on a throwaway branch.
 
-4. **One confirmation** — present the generated task list (N tasks, the `--cli`
-   driver, the resolved branch, any `[manual]` criteria) and a single
+4. **One confirmation** — present the generated task list (N tasks, `codex` as
+   the driver, the resolved branch, any `[manual]` criteria) and a single
    "this will autonomously implement and commit; proceed? [Y/n]". This is the
    standard confirm-before-hard-to-reverse-action check, **not** a plan review
    gate — the user already hardened the plan upstream. The user may decline.
 
-5. **Run the chain** — stream output, passing `--cli` through every call:
+5. **Run the chain** — stream output, passing `--cli codex` through every call:
    ```
    dex import --force tasks/dex-plan.md
-   dex apply
-   dex review
+   dex apply --cli codex
+   dex review --cli codex
    ```
    Stop and report on `STALEMATE` or any non-zero exit.
 
@@ -179,8 +192,7 @@ For each `### Task N: Component` in the source plan, emit one dex task group:
 - **Plan fails validation:** list missing elements, ask whether to proceed,
   never fabricate requirements.
 - **`dex` not on PATH:** STOP with the install one-liner.
-- **`--cli` binary missing:** STOP naming the missing binary; for `pi`, add the
-  LMStudio-must-be-running hint.
+- **`codex` not on PATH:** STOP naming the missing binary.
 - **On `main`/`master`:** do not run `dex apply`; resolve a feature branch first.
 - **`dex apply` STALEMATE / non-zero exit:** stop the chain, report the dex
   output verbatim, do not proceed to `dex review`.
@@ -194,6 +206,8 @@ For each `### Task N: Component` in the source plan, emit one dex task group:
 - No top-level `qualityGates` array.
 - No machine-verifiable-criteria rewriting — dex's agent reads `Expected:` prose
   directly.
+- No backend prompt and no model selection — codex is fixed, model is codex's
+  own default, `.dex/config.json` is never written by the skill.
 
 ## Known limitations
 
@@ -201,9 +215,10 @@ For each `### Task N: Component` in the source plan, emit one dex task group:
   iteration's agent ticks a box without truly satisfying it, dex proceeds
   anyway; `dex review` is the backstop. (Same trust model as Ralph's
   story-`passes` flag.)
-- **`--cli pi` (LMStudio) for `apply` is the riskiest combo** — a local model
-  doing autonomous multi-iteration writes. Documented as "supported, but prefer
-  `codex`/`claude` for `apply`; `pi` is better suited to `dex review`."
+- **Model is not pinned by the skill** — whichever model the user's `codex`
+  install defaults to is what runs `dex apply`/`review`. If a specific model is
+  required, the user sets it in their codex config or hand-edits
+  `.dex/config.json`; the skill stays out of it.
 - **No per-plan review gate** — by explicit design choice, the skill runs the
   full `import → apply → review` chain after a single confirmation. The branch
   guard is the only hard safety stop.
@@ -226,3 +241,6 @@ For each `### Task N: Component` in the source plan, emit one dex task group:
 - Sharing plan-location/validation code with plan-to-ralph (repo favors
   self-contained skills).
 - `dex research` / `dex bare` integration.
+- Model selection / writing `.dex/config.json` (codex's default model is used).
+- Multi-backend support (pi/LMStudio, claude, gemini, …) — codex is fixed; any
+  `--cli` override is undocumented power-user surface, not a first-class feature.
