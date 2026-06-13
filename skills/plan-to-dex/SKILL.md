@@ -102,16 +102,54 @@ If a verification step requires human judgment ("inspect the output", "if WARN l
 
 ## Step 4: Preflight Checks
 
-<!-- filled in Task 5 -->
+1. **`dex` on PATH:** `command -v dex` — else STOP: "dex not found. Install: `curl -sSfL https://raw.githubusercontent.com/francescoalemanno/dex/main/install.sh | bash`".
+2. **`codex` on PATH:** `command -v codex` — else STOP: "codex CLI not found; this skill runs dex with the codex backend."
+3. **Branch guard:** get the current branch (`git rev-parse --abbrev-ref HEAD`). If it is `main` or `master`, resolve a feature branch (use a name the user provided, else ask for one) and `git switch -c <name>` before any `dex apply`. `dex apply` auto-commits across iterations — those commits must land on a throwaway branch, never `main`/`master`.
 
 ## Step 5: Confirm
 
-<!-- filled in Task 5 -->
+Present a single confirmation and wait for a yes/no:
+
+```
+plan-to-dex — ready to run
+--------------------------
+Source plan: <path>
+Tasks:       <N>  (→ <N> dex iterations)
+Backend:     codex  (dex --cli codex)
+Branch:      <resolved branch>
+Manual criteria (codex will tick without proof):
+  - [manual] <text>            # omit this block if none
+
+This runs dex autonomously: it will implement and COMMIT across <N> iterations,
+then run a multi-reviewer pass. Proceed? [y/N]
+```
+
+This is the standard confirm-before-a-hard-to-reverse-action check, NOT a plan review gate — the plan was hardened upstream. If the user declines, stop (the `tasks/dex-plan.md` file is already written for them to inspect).
 
 ## Step 6: Run the dex Chain
 
-<!-- filled in Task 5 -->
+Run these in order, streaming output. Do NOT set `--model`; do NOT edit `.dex/config.json`.
+
+```bash
+dex import --force tasks/dex-plan.md
+dex apply --cli codex
+dex review --cli codex
+```
+
+- If `dex apply` prints `STALEMATE` or exits non-zero, STOP — report dex's output verbatim and do NOT run `dex review`.
+- If `dex import` fails validation, STOP and show the error (the translated file lacks an open checkbox — a translation bug).
 
 ## Step 7: Handoff Report
 
-<!-- filled in Task 5 -->
+After the chain completes, report:
+
+```
+plan-to-dex complete
+--------------------
+Branch:           <branch>
+Tasks completed:  <done>/<total>   (from dex plan-step counts)
+Review findings:  .dex/review-*.md
+Next:             review the diff, then `dex finalize --onto main`
+```
+
+Do NOT run `dex finalize` automatically — merging back is the user's call.
