@@ -29,11 +29,27 @@ The plan is the **source of truth**. Do NOT re-interview the user, regenerate re
 
 ## Step 1: Locate the Plan
 
-<!-- filled in Task 3 -->
+1. If the user provided a file path as argument, use it.
+2. Otherwise, scan for the most recent plan file by date prefix (`YYYY-MM-DD`), in this order:
+   - `docs/superpowers/plans/` (default for `superpowers:writing-plans` ≥ 5.1.0)
+   - `docs/plans/` (legacy location)
+   Match `YYYY-MM-DD-*.md` (do NOT match `*-design.md` — those are design docs).
+3. If no plan found: **STOP** — "No implementation plan found. Run /superpowers:writing-plans first."
+
+Read the plan file. 5.1.0+ plans are self-contained — the header carries `**Goal:**`, `**Architecture:**`, and `**Tech Stack:**`. A companion design doc is optional and not required here.
+
+**Header callout to ignore:** 5.1.0+ plans begin with a blockquote `> **For agentic workers:** REQUIRED SUB-SKILL:`. It is metadata, not a task — skip it.
 
 ## Step 2: Validate the Plan
 
-<!-- filled in Task 3 -->
+Verify the plan contains:
+
+- A `**Goal:**` line (5.1.0 header) or `## Goal` section (legacy)
+- At least one task heading: `### Task N: [Component Name]` (accept `## Task N:` too)
+- A `**Files:**` block per task with `Create:` / `Modify:` / `Test:` bullets (older plans may list paths inline — accept either)
+- Per-step verification: `- [ ] **Step N:**` checkboxes with `Run:`/`Expected:` lines, OR a fenced bash block followed by an `Expected:` paragraph
+
+If validation fails, list what is missing and ask whether to proceed. **Never invent requirements to fill gaps.**
 
 ## Step 3: Translate to dex plan.md
 
