@@ -1,12 +1,10 @@
 # Claude Skills
 
-A [Claude Code](https://claude.com/claude-code) plugin with shared skills for autonomous story execution using Ralph — a loop that reads `tasks/prd.json` and drives Claude Code or OpenAI Codex through one user story per iteration.
+A [Claude Code](https://claude.com/claude-code) plugin bundling skills for autonomous story execution, adversarial spec review, and workflow support.
 
 ## Skills
 
-**`/plan-to-ralph`** — Convert a Superpowers implementation plan into Ralph's `prd.json` format. Maps plan tasks to user stories with machine-verifiable acceptance criteria, injects quality gates, and seeds cross-iteration context.
-
-**`/plan-to-dex`** — Run a hardened Superpowers plan through the [dex](https://github.com/francescoalemanno/dex) orchestrator instead of the Ralph loop. Translates the plan into dex's checkbox-group `plan.md` (one task = one iteration), imports it, and runs `dex apply` → `dex review` autonomously with codex as the fixed backend. Requires the `dex` and `codex` CLIs.
+**`/plan-to-dex`** — Run a hardened Superpowers plan through the [dex](https://github.com/francescoalemanno/dex) orchestrator. Translates the plan into dex's checkbox-group `plan.md` (one task = one iteration), imports it, and runs `dex apply` → `dex review` autonomously with codex as the fixed backend. Requires the `dex` and `codex` CLIs.
 
 **`/swarm-execute`** — Implement a feature as parallel user stories: Claude orchestrates via the Workflow (ultracode) tool, Codex workers write all code in isolated worktrees, architect + QA reviews gate every merge. Takes a plain-language request or a plan/spec file directly — no `prd.json` or `tasks/` files. Requires the `codex` CLI.
 
@@ -14,9 +12,9 @@ A [Claude Code](https://claude.com/claude-code) plugin with shared skills for au
 
 **`/spec-review-local`** — Same adversarial review loop, but the reviewer is a local model served by [LMStudio](https://lmstudio.ai) via the `pi` CLI. Auto-detects whatever LLM is currently loaded in LMStudio — no hardcoded model. Works fully offline; the reviewer is restricted to read-only tools.
 
-The ralph skills each include two execution scripts:
-- **`ralph.sh`** — Runs the loop with Claude Code (`claude --print`)
-- **`ralph-codex.sh`** — Runs the loop with OpenAI Codex (`codex exec --dangerously-bypass-approvals-and-sandbox`)
+**`/handoff`** — Compact the current conversation into a handoff document so a fresh agent can pick up the work. Writes to the OS temp directory, includes a "suggested skills" section, references existing artifacts by path instead of duplicating them, and redacts secrets/PII.
+
+**`/sprint-status-update`** — Generate a company-wide sprint recap for Slack from the Notion sprint board: categorizes deliveries, summarizes bug reports, and formats a scannable update. Use on Fridays or at sprint boundaries.
 
 ## Install
 
@@ -57,20 +55,6 @@ git clone https://github.com/adelrioj/claude-skills.git
 claude --plugin-dir ./claude-skills
 ```
 
-## Usage
-
-After converting a plan to `tasks/prd.json`:
-
-```bash
-# Claude Code
-${CLAUDE_PLUGIN_ROOT}/skills/plan-to-ralph/scripts/ralph.sh
-
-# OpenAI Codex
-${CLAUDE_PLUGIN_ROOT}/skills/plan-to-ralph/scripts/ralph-codex.sh --model o3
-```
-
-All scripts auto-detect the project root via `git rev-parse --show-toplevel`, so they work correctly from any location.
-
 ## Spec Review
 
 Two interchangeable skills run an adversarial review loop over brainstorming design specs (any file matching `docs/superpowers/specs/*-design.md`):
@@ -84,7 +68,7 @@ Two interchangeable skills run an adversarial review loop over brainstorming des
 
 1. The skill locates the spec (argument, or the most recent `*-design.md` in `docs/superpowers/specs/`)
 2. The spec is sent to the reviewer with a 10-category review checklist
-3. The reviewer verifies the spec's file paths and code references against the actual codebase and returns findings (CRITICAL / IMPORTANT / MINOR) with a PASS or NEEDS REVISION verdict
+3. The reviewer verifies the spec's file paths and code references against the actual codebase and returns findings (CRITICAL / IMPORTANT / ADVISORY / MINOR) with a PASS or NEEDS REVISION verdict
 4. Claude fixes CRITICAL and IMPORTANT findings, then re-sends for review
 5. Loop continues until the reviewer returns PASS (max 3 iterations)
 

@@ -1,6 +1,6 @@
 {
   "name": "claude-skills-marketplace",
-  "description": "Ralph skills for autonomous story execution — converts plans into prd.json and drives Claude Code or Codex through stories",
+  "description": "Skills for autonomous story execution, adversarial spec review, and workflow support",
   "owner": {
     "name": "adelrioj"
   },
@@ -8,15 +8,14 @@
     {
       "name": "claude-skills",
       "source": "./",
-      "description": "Shared skills for autonomous story execution using Ralph — plan-to-ralph, swarm-execute, and plan-to-dex (dex orchestrator)",
+      "description": "Skills for autonomous story execution (plan-to-dex, swarm-execute), adversarial spec review (spec-review-codex, spec-review-local), and workflow helpers (handoff, sprint-status-update)",
       "version": "1.1.1",
       "keywords": [
-        "ralph",
         "autonomous",
         "stories",
-        "prd",
         "swarm",
-        "agent-teams",
+        "spec-review",
+        "codex",
         "dex"
       ],
       "category": "productivity"
