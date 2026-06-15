@@ -26,7 +26,7 @@ All state lives in this conversation and in git. No `tasks/prd.json`, no `progre
 ## When NOT to Use
 
 - Single story or strictly sequential chain — implement directly (or delegate the one story to Codex via `/codex:rescue`)
-- The user wants the file-based Ralph loop (`/plan-to-ralph` + `ralph.sh`) — that flow still exists for headless terminal execution
+- The user wants a single linear orchestrator over a hardened plan — use `/plan-to-dex` (one task per dex iteration) instead of parallel batching
 
 ---
 

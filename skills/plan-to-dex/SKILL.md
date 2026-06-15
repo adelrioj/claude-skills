@@ -1,6 +1,6 @@
 ---
 name: plan-to-dex
-description: 'Use when running an already-hardened Superpowers implementation plan through the dex orchestrator (codex backend) instead of the Ralph loop. Triggers on: convert plan to dex, plan to dex, dex from plan, run plan with dex, plan-to-dex.'
+description: 'Use when running an already-hardened Superpowers implementation plan through the dex orchestrator (codex backend). Triggers on: convert plan to dex, plan to dex, dex from plan, run plan with dex, plan-to-dex.'
 user-invocable: true
 ---
 
@@ -94,7 +94,7 @@ Detect project quality tooling and append a `Quality gates:` checkbox to **every
 | `pyproject.toml` | `pytest`, `ruff`, `mypy`            | `pytest`, `ruff check`, …          |
 | `Cargo.toml`     | —                                   | `cargo test`, `cargo clippy`       |
 
-If no tooling is detected, ask: "What commands must pass for every task?" Unlike `/plan-to-ralph`, do **not** write a top-level array — dex has no equivalent; codex just runs the commands named in the checkbox.
+If no tooling is detected, ask: "What commands must pass for every task?" Do **not** write a top-level array of gate commands — dex has no equivalent; codex just runs the commands named in the checkbox.
 
 ### Manual criteria
 
