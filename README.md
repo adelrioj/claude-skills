@@ -16,6 +16,8 @@ A [Claude Code](https://claude.com/claude-code) plugin bundling skills for auton
 
 **`/sprint-status-update`** — Generate a company-wide sprint recap for Slack from the Notion sprint board: categorizes deliveries, summarizes bug reports, and formats a scannable update. Use on Fridays or at sprint boundaries.
 
+**`/orbstack-compatible`** — Make a Docker Compose project stop colliding on host ports across worktrees/projects by moving containerized services onto OrbStack routable domains (`<service>.<project>.orb.local`). Strips `ports:` from the base compose, adds an opt-in `docker-compose.ports.yml` for Windows/CI, rewrites local env URLs to domains, then verifies live. Requires OrbStack as the active Docker engine.
+
 ## Install
 
 Add the marketplace, then install the plugin:

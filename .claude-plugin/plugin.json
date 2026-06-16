@@ -1,6 +1,6 @@
 {
   "name": "claude-skills",
-  "description": "Skills for autonomous story execution (dex orchestrator and parallel Codex swarm), adversarial spec review (Codex or local LMStudio), and workflow helpers (handoff, sprint status)",
+  "description": "Skills for autonomous story execution (dex orchestrator and parallel Codex swarm), adversarial spec review (Codex or local LMStudio), OrbStack port-collision migration, and workflow helpers (handoff, sprint status)",
   "version": "1.1.2",
   "author": {
     "name": "adelrioj",
