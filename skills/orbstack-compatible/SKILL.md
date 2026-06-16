@@ -1,6 +1,6 @@
 ---
 name: orbstack-compatible
-description: "Use when a Docker Compose project should stop colliding on host ports across git worktrees or separate projects, by switching containerized services to OrbStack routable domains instead of published host ports. Edits docker-compose and local env files directly, then verifies live. Requires OrbStack as the active Docker engine (aborts otherwise). Triggers on: make orbstack compatible, orbstack migrate, fix docker port collisions, eliminate docker port collisions across worktrees, orbstack ports, make project orbstack-compatible."
+description: "Use when a Docker Compose project should stop colliding on host ports across git worktrees or separate projects, by switching containerized services to OrbStack routable domains instead of published host ports. Edits docker-compose and local env files directly, then verifies live. Requires OrbStack as the active Docker engine (aborts otherwise). Triggers on: make orbstack compatible, orbstack migrate, fix docker port collisions, eliminate docker port collisions across worktrees, orbstack ports, switch compose services to orbstack domains, make project orbstack-compatible."
 user-invocable: true
 ---
 
@@ -115,7 +115,10 @@ For each containerized service with published ports:
 
 4. **Rewrite local env-file connection URLs to domains.** For each connection var found in
    Phase 2, replace the host with `<service>.${COMPOSE_PROJECT_NAME:-<folder>}.orb.local`
-   and use the **container** port (not the old host port). Example:
+   and use the **container** port (not the old host port). The `<folder>` fallback must be
+   the Compose-sanitized project name — lowercased with any character outside `[a-z0-9_-]`
+   replaced — or the constructed domain won't match OrbStack's actual `<project>` segment
+   and won't resolve. Example:
 
    ```diff
    - DATABASE_URL=postgresql://postgres:postgres@localhost:5432/payments_dev
@@ -149,7 +152,9 @@ For each containerized service with published ports:
      --include='*.json' --include='*.yaml' --include='*.yml' . 2>/dev/null
    ```
 
-   Report any hits as things the user must make env-driven; do not auto-edit source code.
+   This grep is heuristic — it covers `localhost`/`127.0.0.1` but may miss aliased
+   hostnames or `0.0.0.0`; widen the pattern if the project uses those. Report any hits as
+   things the user must make env-driven; do not auto-edit source code.
 
 3. **Document host-run ports (do not edit).** If Phase 2 found a `cw.sh`-style script,
    tell the user which of its logic is now dead: container services no longer need port
