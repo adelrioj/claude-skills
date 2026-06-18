@@ -1,6 +1,6 @@
 # Claude Skills
 
-A [Claude Code](https://claude.com/claude-code) plugin bundling skills for autonomous story execution, adversarial spec review, and workflow support.
+A [Claude Code](https://claude.com/claude-code) plugin bundling skills for autonomous story execution, adversarial spec review, multi-model answer synthesis, OrbStack port-collision migration, and workflow support.
 
 ## Skills
 

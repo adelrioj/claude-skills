@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A Claude Code plugin bundling skills for autonomous story execution, adversarial spec review, and workflow support. Two execution skills drive a feature to completion through external orchestrators — `/plan-to-dex` (the dex orchestrator) and `/swarm-execute` (parallel Codex workers via the Workflow tool). Two spec-review skills harden brainstorming design specs via adversarial review (one backed by OpenAI Codex, one by a local LMStudio model). Two helpers round it out — `/handoff` (compact a conversation for a fresh agent) and `/sprint-status-update` (Notion sprint board → Slack recap).
+A Claude Code plugin bundling skills for autonomous story execution, adversarial spec review, multi-model answer synthesis, and workflow support. Two execution skills drive a feature to completion through external orchestrators — `/plan-to-dex` (the dex orchestrator) and `/swarm-execute` (parallel Codex workers via the Workflow tool). Two spec-review skills harden brainstorming design specs via adversarial review (one backed by OpenAI Codex, one by a local LMStudio model). `/fusion` runs a prompt through a blind multi-model panel (Opus subagents + GPT-5.5 via Codex + a local LMStudio model via `pi`) and has Opus judge and synthesize one grounded answer. `/orbstack-compatible` migrates a Docker Compose project onto OrbStack routable domains to end host-port collisions. Two helpers round it out — `/handoff` (compact a conversation for a fresh agent) and `/sprint-status-update` (Notion sprint board → Slack recap).
 
 ## Plugin Structure
 
