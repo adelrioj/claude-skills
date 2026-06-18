@@ -18,6 +18,8 @@ A [Claude Code](https://claude.com/claude-code) plugin bundling skills for auton
 
 **`/orbstack-compatible`** — Make a Docker Compose project stop colliding on host ports across worktrees/projects by moving containerized services onto OrbStack routable domains (`<service>.<project>.orb.local`). Strips `ports:` from the base compose, adds an opt-in `docker-compose.ports.yml` for Windows/CI, rewrites local env URLs to domains, then verifies live. Requires OrbStack as the active Docker engine.
 
+**`/fusion`** — Run a prompt through a blind multi-model panel — 2× Opus subagents, GPT-5.5 via `codex`, and a local LMStudio model via `pi` — then have a separate Opus judge synthesize the responses into a single verdict. Subscription-only: all panelists use authenticated CLIs or Agent subagents; no API keys required. Pass `opus`, `codex`, or `local` as an optional argument to restrict the panel to a single seat. The local panelist auto-detects whatever model is currently loaded in LMStudio (override base URL with `FUSION_LMSTUDIO_URL`). Any panelist seat that is unavailable (missing CLI, unloaded model, timeout) is dropped gracefully and the panel continues. Provenance for every run is saved to `~/.claude/fusion-runs/` (never committed). Ported from fusion-fable (MIT); the Gemini/`agy` seat is intentionally dropped in favor of the local `pi`/LMStudio seat. Requires: `codex` CLI authenticated, `pi` CLI in PATH, LMStudio running with a model loaded (for the local seat).
+
 ## Install
 
 Add the marketplace, then install the plugin:
