@@ -92,3 +92,44 @@ Loop, up to **3 passes**:
 3. Otherwise fix **only** the CRITICAL and IMPORTANT findings (leave ADVISORY/MINOR), commit, push, and re-review.
 
 After 3 passes, stop even if findings remain. Dispatch **Verifier Agent C** to collect any leftover CRITICAL/IMPORTANT for the final report.
+
+---
+
+## Boundary Verifiers
+
+After the three block edges, dispatch a small subagent (the `Agent` tool) that reads **only** the just-completed step's output and returns structured state. It verifies and extracts — it never performs the step's work.
+
+Each verifier returns exactly:
+- `outcome`: `clean` | `finished-with-notes` | `failed`
+- `state`: the artifact to hand forward (see per-agent below)
+- `notes`: any leftover CRITICAL/IMPORTANT findings or failure reason, verbatim enough to act on
+
+- **Verifier Agent A** (after Step 1 — spec review): `state` = current spec path; `notes` = open IMPORTANTs if the loop hit its cap.
+- **Verifier Agent B** (after Step 4 — execution): `state` = dex status + one-line diff summary; `notes` = any failed dex tasks.
+- **Verifier Agent C** (after Step 6 — PR review): `state` = PR URL; `notes` = leftover CRITICAL/IMPORTANT after 3 passes.
+
+Keep each verifier prompt scoped to one step's output so the conductor's own context stays lean.
+
+---
+
+## Control Flow — Never Halt
+
+Fully autonomous, best-effort:
+
+- **Non-clean quality outcome** (spec-review ended at the cap with open IMPORTANTs; PR-review still has CRITICAL/IMPORTANT after 3 passes; review notes) → **record and continue** to the next step.
+- **Hard failure that makes the next step impossible** (no plan written; dex produced zero diff; no PR created) → **skip the now-impossible steps and jump to the Final Report**. The conductor **never fabricates** a downstream artifact — no empty PR, no review of nothing.
+- **Preflight failure** is the sole hard abort (see Step 0).
+
+"Never halt" means *never block on quality* — it does **not** mean invent work that cannot exist.
+
+---
+
+## Final Report
+
+Because nothing stops mid-run to flag problems, the final report is the contract. Always emit it at the end of any run that cleared preflight. Write it in `/handoff` style to the **OS temporary directory, never the workspace**, and also summarize it in the conversation. Include:
+
+- **Per-step outcome** for all 6 steps: `clean` / `finished-with-notes` / `skipped (reason)` / `failed (reason)`.
+- **PR:** number + URL, or an explicit note that no PR was opened and why.
+- **Unresolved findings:** every leftover CRITICAL/IMPORTANT from spec-review **and** PR-review, verbatim enough to act on.
+- **Failed dex tasks:** any task the dex loop could not complete.
+- **Resume guidance:** what to pick up by hand, with paths to the spec, plan, branch, and PR.
