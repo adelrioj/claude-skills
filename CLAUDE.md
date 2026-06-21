@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A Claude Code plugin bundling skills for autonomous story execution, adversarial spec review, multi-model answer synthesis, and workflow support. Two execution skills drive a feature to completion through external orchestrators — `/plan-to-dex` (the dex orchestrator) and `/swarm-execute` (parallel Codex workers via the Workflow tool). Two spec-review skills harden brainstorming design specs via adversarial review (one backed by OpenAI Codex, one by a local LMStudio model). `/fusion` runs a prompt through a blind multi-model panel (Opus subagents + GPT-5.5 via Codex + a local LMStudio model via `pi`) and has Opus judge and synthesize one grounded answer. `/orbstack-compatible` migrates a Docker Compose project onto OrbStack routable domains to end host-port collisions. Two helpers round it out — `/handoff` (compact a conversation for a fresh agent) and `/sprint-status-update` (Notion sprint board → Slack recap).
+A Claude Code plugin bundling skills for autonomous story execution, adversarial spec review, multi-model answer synthesis, and workflow support. Two execution skills drive a feature to completion through external orchestrators — `/plan-to-dex` (the dex orchestrator) and `/swarm-execute` (parallel Codex workers via the Workflow tool). Two spec-review skills harden brainstorming design specs via adversarial review (one backed by OpenAI Codex, one by a local LMStudio model). `/fusion` runs a prompt through a blind multi-model panel (Opus subagents + GPT-5.5 via Codex + a local LMStudio model via `pi`) and has Opus judge and synthesize one grounded answer. `/ship-it` chains the existing units into one autonomous spec→PR pipeline. `/orbstack-compatible` migrates a Docker Compose project onto OrbStack routable domains to end host-port collisions. Two helpers round it out — `/handoff` (compact a conversation for a fresh agent) and `/sprint-status-update` (Notion sprint board → Slack recap).
 
 ## Plugin Structure
 
@@ -51,6 +51,9 @@ Host-run dev-server ports are document-only — OrbStack can't route to host pro
 ### `/fusion`
 Runs a prompt through a blind multi-model panel (2× Opus subagents + GPT-5.5 via `codex exec --sandbox workspace-write` + local LMStudio model via `pi`) then has a separate Opus judge synthesize the responses into a single verdict. Subscription-only: Opus seats use Agent subagents; Codex and `pi` seats use authenticated CLIs. Accepts an optional `opus`/`codex`/`local` override argument to restrict to a single seat. The local panelist auto-detects the loaded LMStudio model via `/api/v0/models` (override base URL with `FUSION_LMSTUDIO_URL`), never hardcoding a model id. Any unavailable seat (missing CLI, unloaded model, timeout) is dropped gracefully and the panel continues. Provenance is written to `~/.claude/fusion-runs/`, never committed. Ported from fusion-fable (MIT); the Gemini/`agy` seat and its PTY/bug-#76 workaround are intentionally dropped in favor of the local `pi`/LMStudio seat.
 
+### `/ship-it`
+Pure conductor that chains the existing units into one autonomous spec→PR pipeline. Six-step sequential process: hardens the spec via `/spec-review-codex`, writes the implementation plan, executes it via `/plan-to-dex`, opens a PR with `/commit-commands:commit-push-pr`, runs `/review-pr` to gate the merge, then fixes CRITICAL/IMPORTANT findings (up to 3 passes). Has three boundary verifiers — preflight (spec validity and branch safety, sole hard abort), spec-review verdict (best-effort, non-blocking), and PR review (best-effort, non-blocking). Never halts on quality findings; records any leftover issues in a final report. Requires the `codex` and `dex` CLIs plus the `pr-review-toolkit` and `commit-commands` plugins.
+
 ## Development
 
 ### Local testing
@@ -86,3 +89,6 @@ Distributed via marketplace (`.claude-plugin/marketplace.json`). Install/update/
 - `/fusion` auto-detects the loaded LMStudio model via `/api/v0/models` (override base URL with `FUSION_LMSTUDIO_URL`), never hardcoding a model id — same pattern as `/spec-review-local`
 - `/fusion` provenance lives in `~/.claude/fusion-runs/`, never committed; any panelist seat degrades gracefully (missing CLI / unloaded model / timeout → dropped, panel continues)
 - `/fusion` is a port of fusion-fable (MIT); the Gemini/`agy` seat and its PTY/bug-#76 workaround are intentionally dropped in favor of the local `pi`/LMStudio seat
+- `/ship-it` is a pure conductor — it invokes spec-review-codex, writing-plans, plan-to-dex, /commit-commands:commit-push-pr, and /review-pr LIVE and duplicates none of their logic
+- `/ship-it` is best-effort and never halts on quality; the only hard abort is a failed preflight; a hard failure that makes the next step impossible skips downstream steps and jumps to the final report — it never fabricates a downstream artifact (no empty PR)
+- `/ship-it` keeps no state on disk except the final report, which is written /handoff-style to the OS temp dir, never the workspace
