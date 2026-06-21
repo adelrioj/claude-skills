@@ -27,7 +27,7 @@ Run the full feature pipeline from a thumbs-upped design spec to a reviewed pull
 7. Step 6 — Review + fix loop via `/review-pr`
 8. Emit the final report
 
-Pipeline state (spec path, plan path, branch, PR number, leftover findings) lives in **conversation memory and the verifier hand-offs** — never written to disk. The only written artifact is the final report.
+Pipeline state (spec path, plan path, branch, PR number, leftover findings) lives in **conversation memory and the verifier hand-offs** — never written to the workspace. The only persisted artifact is the final report (written to the OS temp dir).
 
 ---
 
@@ -37,9 +37,9 @@ Run these checks **before any mutation**. Preflight failure is the **only** hard
 
 1. **`codex` on PATH:** `command -v codex` — else STOP: "codex CLI not found; required by spec-review-codex and plan-to-dex."
 2. **`dex` on PATH:** `command -v dex` — else STOP: "dex not found. Install: `curl -sSfL https://raw.githubusercontent.com/francescoalemanno/dex/main/install.sh | bash`."
-3. **`pr-review-toolkit` plugin present:** the `/review-pr` command must resolve — else STOP: "pr-review-toolkit plugin not installed; required for the PR review step."
-4. **`commit-commands` plugin present:** the `/commit-commands:commit-push-pr` command must resolve — else STOP: "commit-commands plugin not installed; required to open the PR."
-5. **Spec located:** the argument is a path to a design spec; if omitted, find the newest `docs/superpowers/specs/*-design.md` and confirm it with the user before starting.
+3. **`pr-review-toolkit` plugin present:** the `/review-pr` command file must exist on disk — `find ~/.claude/plugins -path '*commands/review-pr.md' -print -quit | grep -q .` — else STOP: "pr-review-toolkit plugin not installed; required for the PR review step." (A pre-check on disk is used because a slash command's resolvability cannot be tested without invoking it, and the early abort avoids running the whole pipeline only to fail at the PR step.)
+4. **`commit-commands` plugin present:** the `/commit-commands:commit-push-pr` command file must exist on disk — `find ~/.claude/plugins -path '*commands/commit-push-pr.md' -print -quit | grep -q .` — else STOP: "commit-commands plugin not installed; required to open the PR."
+5. **Spec located:** the argument is a path to a design spec; if omitted, find the newest `docs/superpowers/specs/*-design.md` and confirm it with the user before starting. If no file matches that glob, STOP and ask the user to provide the spec path explicitly.
 
 On any STOP, print the missing item plus its remedy and exit without touching the repo.
 
@@ -54,7 +54,7 @@ On any STOP, print the missing item plus its remedy and exit without touching th
 | 3 | Resolve branch | conductor itself | on a non-`main`/`master` branch | branch name |
 | 4 | Execute | `Skill(plan-to-dex)` (incl. Opus review) | dex loop completes | dex status + diff summary |
 | 5 | Open PR | `/commit-commands:commit-push-pr` | PR created | PR number / URL |
-| 6 | Review loop | `/review-pr` + fix | clean, or 3 passes | leftover findings |
+| 6 | Review loop | `/review-pr` + fix | clean, or capped at 3 attempts | leftover findings |
 
 ---
 
@@ -64,7 +64,7 @@ Invoke `Skill(spec-review-codex)` on the spec resolved in preflight. Let it run 
 
 ## Step 2: Write the Plan
 
-Invoke `Skill(writing-plans)` on the **hardened** spec from Step 1. This is the earliest generative step — do not re-brainstorm or re-interview. When the plan file is written, capture its path. If `writing-plans` produces no plan file (hard failure), skip to the final report (Steps 3-6 are impossible without a plan).
+Invoke `Skill(writing-plans)` on the **hardened** spec from Step 1. This is the earliest generative step — do not re-brainstorm or re-interview. `writing-plans` writes to `docs/superpowers/plans/YYYY-MM-DD-<feature>.md` and reports the path. Capture that path and confirm the file exists on disk: `test -f <plan-path>`. If no plan file exists on disk (hard failure), skip to the final report (Steps 3-6 are impossible without a plan).
 
 ## Step 3: Resolve the Branch
 
@@ -89,7 +89,7 @@ Run the `/commit-commands:commit-push-pr` slash command to commit, push the bran
 Loop, up to **3 passes**:
 1. Run the `/review-pr` slash command against the PR.
 2. If it reports no CRITICAL and no IMPORTANT findings → the PR is clean; exit the loop.
-3. Otherwise fix **only** the CRITICAL and IMPORTANT findings (leave ADVISORY/MINOR), commit, push, and re-review.
+3. Otherwise the conductor itself fixes **only** the CRITICAL and IMPORTANT findings directly in this conversation (not via a sub-skill), leaving ADVISORY/MINOR, then commits, pushes, and re-reviews.
 
 After 3 passes, stop even if findings remain. Dispatch **Verifier Agent C** to collect any leftover CRITICAL/IMPORTANT for the final report.
 
@@ -108,7 +108,15 @@ Each verifier returns exactly:
 - **Verifier Agent B** (after Step 4 — execution): `state` = dex status + one-line diff summary; `notes` = any failed dex tasks.
 - **Verifier Agent C** (after Step 6 — PR review): `state` = PR URL; `notes` = leftover CRITICAL/IMPORTANT after 3 passes.
 
-Keep each verifier prompt scoped to one step's output so the conductor's own context stays lean.
+Keep each verifier prompt scoped to one step's output so the conductor's own context stays lean. Dispatch each verifier with a prompt built from this template so the return is parseable, not a free-form summary:
+
+> You are a boundary verifier. Read **only** the step output provided below — do not perform any work or run any commands beyond what is needed to read state. Return exactly three fields:
+> - `outcome`: one of `clean` | `finished-with-notes` | `failed`
+> - `state`: <the artifact to extract for this step — e.g. current spec path / dex status + one-line diff summary / PR URL>
+> - `notes`: any leftover CRITICAL/IMPORTANT findings or failure reason, verbatim enough to act on (empty if none)
+>
+> Step output:
+> {paste the just-completed step's output here}
 
 ---
 
