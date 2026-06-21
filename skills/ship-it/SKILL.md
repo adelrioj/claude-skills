@@ -60,7 +60,7 @@ On any STOP, print the missing item plus its remedy and exit without touching th
 
 ## Step 1: Harden the Spec
 
-Invoke `Skill(spec-review-codex)` on the spec resolved in preflight. Let it run its full 3-iteration fix loop. When it returns, dispatch **Verifier Agent A** (see "Boundary Verifiers") to read its outcome and report: PASS / finished-with-open-IMPORTANTs / failed, plus the current spec path (it may have been rewritten). Record the outcome; **continue regardless** (never halt on quality).
+Invoke `Skill(spec-review-codex)` on the spec resolved in preflight. Let it run its full 3-iteration fix loop. When it returns, dispatch **Verifier Agent A** (see "Boundary Verifiers") to read its outcome and report: `clean` / `finished-with-notes` / `failed` (a PASS maps to `clean`; an open-IMPORTANTs cap to `finished-with-notes`), plus the current spec path (it may have been rewritten). Record the outcome; **continue regardless** (never halt on quality).
 
 ## Step 2: Write the Plan
 
