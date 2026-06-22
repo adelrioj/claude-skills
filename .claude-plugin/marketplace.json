@@ -9,7 +9,7 @@
       "name": "claude-skills",
       "source": "./",
       "description": "Skills for autonomous story execution (plan-to-dex, swarm-execute), adversarial spec review (spec-review-codex, spec-review-local), blind multi-model fusion panel (fusion), spec-to-PR conductor (ship-it), OrbStack port-collision migration (orbstack-compatible), and workflow helpers (handoff, sprint-status-update)",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "keywords": [
         "autonomous",
         "stories",
