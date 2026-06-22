@@ -16,6 +16,14 @@ Run the full feature pipeline from a thumbs-upped design spec to a reviewed pull
 
 ---
 
+## Step Isolation
+
+The heavy Skill steps (1, 2, 4) emit a lot of output — codex review iterations, the full plan, dex `apply`/`review` logs across every task. To keep that out of the conductor's context, **Steps 1, 2, and 4 run as execute-and-report subagents**: a subagent (the `Agent` tool) invokes the step's Skill *inside its own context*, absorbs all the raw output, and returns **only** the structured contract (`outcome` / `state` / `notes`). The conductor's context never holds the raw logs. (This works because an `Agent` subagent can invoke the `Skill` tool — verified.)
+
+Steps 3, 5, 6 run in the main loop: Step 3 is two git commands (no context cost), Step 5 is outward-facing and cheap (you want PR creation visible), and Step 6's `/review-pr` already spawns its own specialized agents — wrapping it in another subagent would nest agents and hide the findings. After Step 6, dispatch one **boundary verifier** — a subagent that extracts the contract from the completed review without performing work — to collect leftover findings.
+
+---
+
 ## The Job
 
 1. Preflight (fail fast)
@@ -27,7 +35,7 @@ Run the full feature pipeline from a thumbs-upped design spec to a reviewed pull
 7. Step 6 — Review + fix loop via `/review-pr`
 8. Emit the final report
 
-Pipeline state (spec path, plan path, branch, PR number, leftover findings) lives in **conversation memory and the verifier hand-offs** — never written to the workspace. The only persisted artifact is the final report (written to the OS temp dir).
+Pipeline state (spec path, plan path, branch, PR number, leftover findings) lives in **conversation memory and the subagent hand-offs** (the execute-and-report subagent or boundary-verifier returns — the same three-field contract) — never written to the workspace. The only persisted artifact is the final report (written to the OS temp dir).
 
 ---
 
@@ -56,15 +64,17 @@ On any STOP, print the missing item plus its remedy and exit without touching th
 | 5 | Open PR | `/commit-commands:commit-push-pr` | PR created | PR number / URL |
 | 6 | Review loop | `/review-pr` + fix | clean, or capped at 3 attempts | leftover findings |
 
+**Isolation:** Steps 1, 2, 4 run as execute-and-report subagents (raw output stays in the subagent); Steps 3, 5, 6 run in the main loop (see Step Isolation).
+
 ---
 
 ## Step 1: Harden the Spec
 
-Invoke `Skill(spec-review-codex)` on the spec resolved in preflight. Let it run its full 3-iteration fix loop. When it returns, dispatch **Verifier Agent A** (see "Boundary Verifiers") to read its outcome and report: `clean` / `finished-with-notes` / `failed` (a PASS maps to `clean`; an open-IMPORTANTs cap to `finished-with-notes`), plus the current spec path (it may have been rewritten). Record the outcome; **continue regardless** (never halt on quality).
+Dispatch an execute-and-report subagent (see "Step Subagents") that runs `Skill(spec-review-codex)` on the spec resolved in preflight — letting its full 3-iteration fix loop run — and returns the contract: `outcome` is `clean` / `finished-with-notes` / `failed` (a PASS maps to `clean`; an open-IMPORTANTs cap to `finished-with-notes`), `state` = the current (possibly rewritten) spec path. Record it; **continue regardless** (never halt on quality).
 
 ## Step 2: Write the Plan
 
-Invoke `Skill(writing-plans)` on the **hardened** spec from Step 1. This is the earliest generative step — do not re-brainstorm or re-interview. `writing-plans` writes to `docs/superpowers/plans/YYYY-MM-DD-<feature>.md` and reports the path. Capture that path and confirm the file exists on disk: `test -f <plan-path>`. If no plan file exists on disk (hard failure), skip to the final report (Steps 3-6 are impossible without a plan).
+Dispatch an execute-and-report subagent that runs `Skill(writing-plans)` on the **hardened** spec from Step 1 and returns the plan path as `state`. This is the earliest generative step — do not re-brainstorm or re-interview. `writing-plans` writes to `docs/superpowers/plans/YYYY-MM-DD-<feature>.md`. After the subagent returns, the conductor confirms the file exists on disk: `test -f <plan-path>`. If no plan file exists on disk (hard failure), skip to the final report (Steps 3-6 are impossible without a plan).
 
 ## Step 3: Resolve the Branch
 
@@ -76,9 +86,9 @@ Record the branch name.
 
 ## Step 4: Execute
 
-Invoke `Skill(plan-to-dex)` with the plan path from Step 2; let it run the dex `apply`/`review` loop to completion, including its own final Opus review. When it returns, dispatch **Verifier Agent B** to report: did the loop complete, which (if any) dex tasks failed, and a one-line diff summary. Record it.
+Dispatch an execute-and-report subagent (see "Step Subagents") that runs `Skill(plan-to-dex)` with the plan path from Step 2 — letting the dex `apply`/`review` loop run to completion, including its own final Opus review — and returns the contract: `state` = dex status + a one-line diff summary; `notes` = any failed dex tasks. This step emits the most output of any in the pipeline, so the dex logs staying in the subagent's context (not the conductor's) is the biggest isolation win.
 
-**Hard-failure branch:** if dex produced **zero diff** (`git status --porcelain` empty and no dex commits), there is nothing to commit — skip Steps 5-6 and jump to the final report. Do not open an empty PR.
+**Post-step zero-diff check:** after the subagent returns, the conductor checks the repo **in its own shell** — never from the subagent's `state` summary — by running `git status --porcelain` and inspecting `git log` for dex commits. If dex produced **zero diff** (no working-tree changes and no dex commits), there is nothing to commit → skip Steps 5-6 and jump to the final report. Do not open an empty PR. Verifying against git directly (not the summary) is what stops a mis-summary from fabricating a PR.
 
 ## Step 5: Open the PR
 
@@ -91,32 +101,40 @@ Loop, up to **3 passes**:
 2. If it reports no CRITICAL and no IMPORTANT findings → the PR is clean; exit the loop.
 3. Otherwise the conductor itself fixes **only** the CRITICAL and IMPORTANT findings directly in this conversation (not via a sub-skill), leaving ADVISORY/MINOR, then commits, pushes, and re-reviews.
 
-After 3 passes, stop even if findings remain. Dispatch **Verifier Agent C** to collect any leftover CRITICAL/IMPORTANT for the final report.
+After 3 passes, stop even if findings remain. Dispatch the **boundary verifier** (see "Step Subagents") to collect any leftover CRITICAL/IMPORTANT for the final report.
 
 ---
 
-## Boundary Verifiers
+## Step Subagents
 
-After the three block edges, dispatch a small subagent (the `Agent` tool) that reads **only** the just-completed step's output and returns structured state. It verifies and extracts — it never performs the step's work.
+Every subagent — the three execute-and-report subagents (Steps 1/2/4) and the one boundary verifier (Step 6) — returns the same three-field contract:
 
-Each verifier returns exactly:
 - `outcome`: `clean` | `finished-with-notes` | `failed`
-- `state`: the artifact to hand forward (see per-agent below)
-- `notes`: any leftover CRITICAL/IMPORTANT findings or failure reason, verbatim enough to act on
+- `state`: the artifact to hand forward (per-step below)
+- `notes`: any leftover CRITICAL/IMPORTANT findings or failure reason, verbatim enough to act on (empty if none)
 
-- **Verifier Agent A** (after Step 1 — spec review): `state` = current spec path; `notes` = open IMPORTANTs if the loop hit its cap.
-- **Verifier Agent B** (after Step 4 — execution): `state` = dex status + one-line diff summary; `notes` = any failed dex tasks.
-- **Verifier Agent C** (after Step 6 — PR review): `state` = PR URL; `notes` = leftover CRITICAL/IMPORTANT after 3 passes.
+**Per-step `state`:**
+- **Step 1 — spec review:** `state` = current (possibly rewritten) spec path; `notes` = open IMPORTANTs if the loop hit its cap.
+- **Step 2 — plan:** `state` = plan path.
+- **Step 4 — execution:** `state` = dex status + one-line diff summary; `notes` = any failed dex tasks.
+- **Step 6 — PR review:** `state` = PR URL; `notes` = leftover CRITICAL/IMPORTANT after 3 passes.
 
-Keep each verifier prompt scoped to one step's output so the conductor's own context stays lean. Dispatch each verifier with a prompt built from this template so the return is parseable, not a free-form summary:
+### Execute-and-report subagent prompt (Steps 1/2/4)
 
-> You are a boundary verifier. Read **only** the step output provided below — do not perform any work or run any commands beyond what is needed to read state. Return exactly three fields:
-> - `outcome`: one of `clean` | `finished-with-notes` | `failed`
-> - `state`: <the artifact to extract for this step — e.g. current spec path / dex status + one-line diff summary / PR URL>
-> - `notes`: any leftover CRITICAL/IMPORTANT findings or failure reason, verbatim enough to act on (empty if none)
+The subagent runs the step AND returns the contract — the raw output stays in *its* context:
+
+> You are executing one step of an autonomous pipeline. Invoke `Skill(<step-skill>)` with these inputs: <inputs>. Let it run to completion. Then return **only** the three-field contract — `outcome` (`clean` | `finished-with-notes` | `failed`), `state` (<the artifact for this step>), `notes` (verbatim leftover CRITICAL/IMPORTANT or failure reason; empty if none). Do not paste the step's raw output, logs, or findings back — only the contract. If the step fails, write its full output tail to a temp file and put that path in `notes`.
+
+### Boundary verifier prompt (Step 6)
+
+The verifier reads the completed `/review-pr` output and extracts state — it never performs the step's work:
+
+> You are a boundary verifier. Read **only** the step output provided below — do not perform any work or run any commands beyond what is needed to read state. Return exactly three fields: `outcome` (`clean` | `finished-with-notes` | `failed`), `state` (the PR URL), `notes` (verbatim leftover CRITICAL/IMPORTANT after 3 passes; empty if none).
 >
 > Step output:
-> {paste the just-completed step's output here}
+> {paste the just-completed review output here}
+
+Keep every subagent prompt scoped to one step so the conductor's own context stays lean.
 
 ---
 
