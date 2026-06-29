@@ -133,11 +133,22 @@ Run these in order, streaming output. Do NOT set `--model`; do NOT edit `.dex/co
 
 ```bash
 dex import --force tasks/dex-plan.md
-dex --cli codex apply
+dex --cli codex apply        # long-running — see the poll-to-completion contract below
 dex --cli codex review
 ```
 
 `--cli` is a **global** dex option (validated against dex 0.4.9) and must precede the subcommand — `dex --cli codex apply`, not `dex apply --cli codex` (the latter errors with `Unrecognized argument: --cli`). `dex import` takes a path arg and needs no `--cli`.
+
+### `dex apply` is long-running — poll to completion in THIS invocation
+
+`dex apply` drives codex through every task and **will likely exceed a single foreground Bash timeout** (the harness caps foreground Bash at 10 minutes / `600000ms`). Run it foreground with the **maximum timeout** anyway, then **loop**:
+
+1. Run `dex --cli codex apply` (foreground, `timeout: 600000`).
+2. Re-read `.dex/plan.md` after the pass.
+3. If any checkbox is still `[ ]` **and** dex did not report a terminal state, run `dex --cli codex apply` again (it resumes where it left off).
+4. Repeat until **all checkboxes are `[x]`** or dex reports terminal (`STALEMATE` / non-zero exit).
+
+**Never** background `dex apply` (`run_in_background: true`) and **never** "arm a watcher and yield / return" — backgrounded work is reaped the moment the surrounding invocation (especially a subagent) returns, so the apply dies and only the `dex import` setup commit lands. The loop must run to a terminal state inside the current invocation before you do anything else.
 
 - If `dex apply` prints `STALEMATE` or exits non-zero, STOP — report dex's output verbatim and do NOT run `dex review`.
 - If `dex import` fails validation, STOP and show the error (the translated file lacks an open checkbox — a translation bug).

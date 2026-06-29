@@ -70,6 +70,7 @@ Distributed via marketplace (`.claude-plugin/marketplace.json`). Install/update/
 
 - `${CLAUDE_PLUGIN_ROOT}` resolves to the plugin install path at runtime — always use this in script references shown to users
 - `/plan-to-dex` pins the dex backend to codex and never writes `.dex/config.json` — the model is codex's own default; dex owns all execution state under `.dex/`
+- `dex apply` is long-running (exceeds the 10-min foreground Bash ceiling) — `/plan-to-dex` Step 6 mandates a foreground poll-to-completion loop (re-run `dex apply`, re-read `.dex/plan.md`, until all checkboxes `[x]` or terminal) and forbids `run_in_background`/"arm a watcher and yield"; `/ship-it`'s execute-and-report subagent prompt carries the same anti-yield guard because a subagent's backgrounded processes are reaped on return — backgrounding leaves only the dex setup commit
 - Quality gate commands are never hardcoded — swarm-execute detects them from the repo (CI config → package.json scripts → ecosystem files → CLAUDE.md) and runs them as individual commands, never `&&`-joined; plan-to-dex names them in each dex checkbox
 - A detected e2e command is optional — omit it entirely if not detected (never set to null/empty); swarm-execute runs it only at final validation
 - Swarm-execute keeps no state on disk — story table, batch plan, merge ledger, and findings digest live in conversation memory; recovery state is git history (story-ID-tagged merge commits) plus persisted worktrees
