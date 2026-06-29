@@ -88,6 +88,8 @@ Record the branch name.
 
 Dispatch an execute-and-report subagent (see "Step Subagents") that runs `Skill(plan-to-dex)` with the plan path from Step 2 — letting the dex `apply`/`review` loop run to completion, including its own final Opus review — and returns the contract: `state` = dex status + a one-line diff summary; `notes` = any failed dex tasks. This step emits the most output of any in the pipeline, so the dex logs staying in the subagent's context (not the conductor's) is the biggest isolation win.
 
+**`dex apply` is long-running** — it routinely exceeds the 10-minute foreground Bash ceiling. The subagent MUST run plan-to-dex's poll-to-completion loop (re-run `dex apply` foreground, max timeout, until all `.dex/plan.md` checkboxes are `[x]` or dex reports terminal) **inside its own invocation**. It MUST NOT background `dex apply` and return — a subagent's background processes are reaped on return, so the apply dies and only the dex setup commit lands. See the anti-yield guard in the subagent prompt below.
+
 **Post-step zero-diff check:** after the subagent returns, the conductor checks the repo **in its own shell** — never from the subagent's `state` summary — by running `git status --porcelain` and inspecting `git log` for dex commits. If dex produced **zero diff** (no working-tree changes and no dex commits), there is nothing to commit → skip Steps 5-6 and jump to the final report. Do not open an empty PR. Verifying against git directly (not the summary) is what stops a mis-summary from fabricating a PR.
 
 ## Step 5: Open the PR
@@ -123,7 +125,7 @@ Every subagent — the three execute-and-report subagents (Steps 1/2/4) and the 
 
 The subagent runs the step AND returns the contract — the raw output stays in *its* context:
 
-> You are executing one step of an autonomous pipeline. Invoke `Skill(<step-skill>)` with these inputs: <inputs>. Let it run to completion. Then return **only** the three-field contract — `outcome` (`clean` | `finished-with-notes` | `failed`), `state` (<the artifact for this step>), `notes` (verbatim leftover CRITICAL/IMPORTANT or failure reason; empty if none). Do not paste the step's raw output, logs, or findings back — only the contract. If the step fails, write its full output tail to a temp file and put that path in `notes`.
+> You are executing one step of an autonomous pipeline. Invoke `Skill(<step-skill>)` with these inputs: <inputs>. Let it run to completion. **You MUST NOT return until the step reaches a terminal state.** If the step launches a long-running process (e.g. `dex apply`), poll it to completion **in THIS invocation** — returning reaps any backgrounded work and silently discards the result. Never "arm a watcher and wait", never background-and-return: run the step's own poll-to-completion loop foreground until it is genuinely done. Then return **only** the three-field contract — `outcome` (`clean` | `finished-with-notes` | `failed`), `state` (<the artifact for this step>), `notes` (verbatim leftover CRITICAL/IMPORTANT or failure reason; empty if none). Do not paste the step's raw output, logs, or findings back — only the contract. If the step fails, write its full output tail to a temp file and put that path in `notes`.
 
 ### Boundary verifier prompt (Step 6)
 
