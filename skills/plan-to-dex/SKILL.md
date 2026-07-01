@@ -134,21 +134,37 @@ Run these in order, streaming output. Do NOT set `--model`; do NOT edit `.dex/co
 ```bash
 dex import --force tasks/dex-plan.md
 dex --cli codex apply        # long-running — see the poll-to-completion contract below
-dex --cli codex review
+dex --cli codex review       # ALSO long-running — same poll-to-completion contract
 ```
 
 `--cli` is a **global** dex option (validated against dex 0.4.9) and must precede the subcommand — `dex --cli codex apply`, not `dex apply --cli codex` (the latter errors with `Unrecognized argument: --cli`). `dex import` takes a path arg and needs no `--cli`.
 
-### `dex apply` is long-running — poll to completion in THIS invocation
+### `dex apply` AND `dex review` are long-running — poll each to completion in THIS invocation
 
-`dex apply` drives codex through every task and **will likely exceed a single foreground Bash timeout** (the harness caps foreground Bash at 10 minutes / `600000ms`). Run it foreground with the **maximum timeout** anyway, then **loop**:
+Both phases drive codex through work that **will likely exceed a single foreground Bash timeout** (the harness caps foreground Bash at 10 minutes / `600000ms`). Run each foreground with the **maximum timeout**, then **loop** — the contract is identical for both.
 
+**`dex apply`:**
 1. Run `dex --cli codex apply` (foreground, `timeout: 600000`).
 2. Re-read `.dex/plan.md` after the pass.
 3. If any checkbox is still `[ ]` **and** dex did not report a terminal state, run `dex --cli codex apply` again (it resumes where it left off).
 4. Repeat until **all checkboxes are `[x]`** or dex reports terminal (`STALEMATE` / non-zero exit).
 
-**Never** background `dex apply` (`run_in_background: true`) and **never** "arm a watcher and yield / return" — backgrounded work is reaped the moment the surrounding invocation (especially a subagent) returns, so the apply dies and only the `dex import` setup commit lands. The loop must run to a terminal state inside the current invocation before you do anything else.
+**`dex review`:** the same loop — re-run `dex --cli codex review` foreground at max timeout every time the 10-min ceiling truncates it, until it reaches a terminal state: it prints its completion line (`Review complete` / `DONE`) and/or writes `.dex/review-*.md`, or reports a terminal `STALEMATE` / non-zero exit. **Terminal on quota:** if codex exhausts its usage quota *after* apply is fully done (every `.dex/plan.md` checkbox `[x]`) and at least one reviewer pass has written its findings, treat the quota state as terminal — report it and stop. Do NOT loop forever on quota backoff.
+
+**FORBIDDEN — no escape hatches (this is exactly where past runs failed):**
+- **Never** run `dex apply` or `dex review` with `run_in_background: true`.
+- **Never** arm a `Monitor` / waiter / `ScheduleWakeup` to "come back later" — nothing re-invokes a returned invocation, so the child is reaped and only the `dex import` setup commit lands.
+- **Never** return on an intermediate "waiting for / running in background / iteration N in progress" state.
+
+Backgrounded work dies the instant this invocation (especially a subagent) returns. The loop MUST reach a terminal state inside the current invocation. If you need to wait on a foreground pid, block on it directly (`wait <pid>`, or `while kill -0 <pid> 2>/dev/null; do sleep 15; done`) — never rely on any waiter or `Monitor` to resume you.
+
+### Before you return: pre-return verification (mandatory)
+
+Do NOT return until you have **run these three checks and can state their results**. If any check fails, keep looping — returning early is a bug, not a shortcut:
+
+1. **Plan done:** `grep -c '\[ \]' .dex/plan.md` prints `0` — every checkbox is `[x]` (or dex printed a terminal `STALEMATE`/quota state, which you name explicitly).
+2. **No live worker:** `pgrep -fl 'dex --cli codex|codex exec'` prints **nothing** — no dex/codex process is still running.
+3. **Commits landed:** `git log --oneline` shows per-task dex commits (not just the lone `dex import` setup commit), and `git status` is as expected.
 
 - If `dex apply` prints `STALEMATE` or exits non-zero, STOP — report dex's output verbatim and do NOT run `dex review`.
 - If `dex import` fails validation, STOP and show the error (the translated file lacks an open checkbox — a translation bug).

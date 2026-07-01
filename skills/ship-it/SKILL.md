@@ -125,7 +125,21 @@ Every subagent — the three execute-and-report subagents (Steps 1/2/4) and the 
 
 The subagent runs the step AND returns the contract — the raw output stays in *its* context:
 
-> You are executing one step of an autonomous pipeline. Invoke `Skill(<step-skill>)` with these inputs: <inputs>. Let it run to completion. **You MUST NOT return until the step reaches a terminal state.** If the step launches a long-running process (e.g. `dex apply`), poll it to completion **in THIS invocation** — returning reaps any backgrounded work and silently discards the result. Never "arm a watcher and wait", never background-and-return: run the step's own poll-to-completion loop foreground until it is genuinely done. Then return **only** the three-field contract — `outcome` (`clean` | `finished-with-notes` | `failed`), `state` (<the artifact for this step>), `notes` (verbatim leftover CRITICAL/IMPORTANT or failure reason; empty if none). Do not paste the step's raw output, logs, or findings back — only the contract. If the step fails, write its full output tail to a temp file and put that path in `notes`.
+> You are executing one step of an autonomous pipeline. Invoke `Skill(<step-skill>)` with these inputs: <inputs>. Let it run to completion. **You MUST NOT return until the step reaches a terminal state.** If the step launches a long-running process (e.g. `dex apply` or `dex review`, or a spec-review codex pass), poll it to completion **in THIS invocation** — returning reaps any backgrounded work and silently discards the result.
+>
+> **FORBIDDEN — every one of these has caused a silent failure in past runs:**
+> - Never run the step's long process with `run_in_background: true`.
+> - Never arm a `Monitor` / waiter / `ScheduleWakeup` to "come back later" — nothing re-invokes you after you return; the child is reaped and the work is lost.
+> - Never return on an intermediate "waiting for / running in background / iteration N in progress" state.
+>
+> Run the step's own poll-to-completion loop **foreground** until it is genuinely done. To wait on a foreground pid, block on it directly (`wait <pid>`, or `while kill -0 <pid> 2>/dev/null; do sleep 15; done`) — never rely on any waiter or `Monitor` to resume you.
+>
+> **Pre-return verification (mandatory) — run these and confirm before returning; if any fails, keep looping:**
+> - **No live worker:** `pgrep -fl 'dex --cli codex|codex exec'` prints nothing.
+> - **Step 4 (dex) only:** `grep -c '\[ \]' .dex/plan.md` prints `0` (or dex reported a terminal `STALEMATE`/quota state you name), AND `git log --oneline` shows per-task dex commits, not just the lone `dex import` setup commit.
+> - **The step's own output declares completion** (spec-review PASS/cap, plan file written, or dex loop terminal) — not "in progress".
+>
+> Then return **only** the three-field contract — `outcome` (`clean` | `finished-with-notes` | `failed`), `state` (<the artifact for this step>), `notes` (verbatim leftover CRITICAL/IMPORTANT or failure reason; empty if none). Do not paste the step's raw output, logs, or findings back — only the contract. If the step fails, write its full output tail to a temp file and put that path in `notes`.
 
 ### Boundary verifier prompt (Step 6)
 
