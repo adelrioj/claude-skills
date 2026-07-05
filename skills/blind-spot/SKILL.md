@@ -1,6 +1,6 @@
 ---
 name: blind-spot
-description: "Use BEFORE starting work on a task — the forward-looking twin of /architect-review-pr — to surface the unknown-unknowns you're about to walk into but can't see. Dispatches a fresh-context Claude subagent that hunts what you don't know you don't know about the codebase, the domain, and the decisions ahead, calibrated to your stated experience, then reports ranked, evidence-backed findings and fixes nothing. Triggers on: blind spot pass, blindspot, unknown unknowns, what don't I know, what am I missing, help me prompt better, I know nothing about, teach me my unknowns, before I start, de-risk this task, surface my blind spots."
+description: "Use BEFORE starting work on a task to surface the unknown-unknowns you're about to walk into but can't see. Dispatches a fresh-context Claude subagent that hunts what you don't know you don't know about the codebase, the domain, and the decisions ahead, calibrated to your stated experience, then reports ranked, evidence-backed findings and fixes nothing. Triggers on: blind spot pass, blindspot, unknown unknowns, what don't I know, what am I missing, help me prompt better, I know nothing about, teach me my unknowns, before I start, de-risk this task, surface my blind spots."
 user-invocable: true
 ---
 
@@ -10,27 +10,15 @@ A **pre-implementation pass that surfaces the unknown-unknowns of a task you're 
 to start** — what you don't know you don't know about this codebase, this domain, and
 the decisions ahead — so you can prompt from the territory instead of a partial map.
 
-It is the **forward-looking twin of `/architect-review-pr`**:
-
-> `/architect-review-pr` asks *"did we finish and wire what we built?"* (post, on a diff).
-> `/blind-spot` asks *"what am I about to walk into that I can't see?"* (pre, on a task).
-
-Like `/architect-review-pr` and `/ponytail-audit`, this is a **finder, not a fixer** — it
-reports ranked, evidence-backed findings and **edits nothing, plans nothing, starts no
-work**. You fold the briefing into your next prompt, `/brainstorming`, or
-`/writing-plans`.
-
-**Where it sits in the family (pre → pre → post):**
-- `/brainstorming` — decides *what* to build (intent, scope, design).
-- `/blind-spot` — surfaces *what you can't see about the terrain* before you build. This skill.
-- `/architect-review-pr` — checks *what you built* is wired and complete.
+this is a **finder, not a fixer** — it reports ranked, evidence-backed findings 
+and **edits nothing, plans nothing, starts no work**. 
+You fold the briefing into your next prompt, `/brainstorming`, or `/writing-plans`.
 
 **Why a fresh subagent (the adversarial mechanism).** The main loop absorbs your framing
 of the task and inherits your blind spots — the same gap that makes an unknown *unknown*
 to you also biases a self-review that shares your context. A fresh `Agent` subagent,
 given only the task + the codebase + your stated experience, re-derives "what's
-surprising here?" without that inherited framing. Same independence rationale as
-`/architect-review-pr`, and same payoff: a Claude subagent, **no external CLI dependency**,
+surprising here?" without that inherited framing. Payoff: a Claude subagent, **no external CLI dependency**,
 installs anywhere.
 
 **Why report-only.** The intent is diagnostic — surface what you can't see so *you*
@@ -179,7 +167,7 @@ no machine-readable contract to enforce.
   shot. They compose: blind-spot → then brainstorm the resolved scope.
 - **Not a fixer or a planner.** It never edits code or writes a plan. Feed its output to
   `/writing-plans` or your next prompt. (Contrast `/spec-review-codex`, which fix-loops.)
-- **Not `/architect-review-pr`.** That reviews a finished diff for wiring; this reviews a
+- **Not architect review.** That reviews a finished diff for wiring; this reviews a
   *forthcoming task* for your blind spots. Opposite ends of the same axis.
 
 ## Deliberate simplifications (ponytail)
