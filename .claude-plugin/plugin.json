@@ -1,6 +1,6 @@
 {
   "name": "claude-skills",
-  "description": "Skills for autonomous story execution (dex orchestrator and parallel Codex swarm), adversarial spec review (Codex or local LMStudio), blind multi-model fusion panel (fusion), spec-to-PR conductor (ship-it), OrbStack port-collision migration, and workflow helpers (handoff, sprint status)",
+  "description": "Skills for autonomous story execution (dex orchestrator and parallel Codex swarm), adversarial spec review (Codex or local LMStudio), completeness & wiring review (architect-review-pr), whole-repo three-lens audit (review-codebase), pre-task blind-spot discovery (blind-spot), blind multi-model fusion panel (fusion), spec-to-PR conductor (ship-it), OrbStack port-collision migration, and workflow helpers (handoff, sprint status)",
   "version": "1.2.7",
   "author": {
     "name": "adelrioj",
