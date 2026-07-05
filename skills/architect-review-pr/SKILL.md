@@ -1,5 +1,5 @@
 ---
-name: architect-review
+name: architect-review-pr
 description: "Use after a feature is built — e.g. the final step of a ship-it run, right after review-pr — to check it is actually complete and wired, not just line-correct. Dispatches a fresh-context Claude subagent that traces the whole repo to hunt completeness and integration gaps in the branch's changes, then reports ranked, evidence-backed findings and fixes nothing. Triggers on: architect review, architecture review, completeness review, wiring review, is this wired, did we finish this, find the gaps, incomplete feature, created but not wired, dead code check, deep pass on what we built."
 user-invocable: true
 ---
@@ -20,7 +20,7 @@ fix-loops. There is no fix loop, no convergence logic, and no external CLI depen
 **Where it sits in the family:**
 - `/code-review`, `/review-pr` — line-level *correctness* on the diff.
 - `/spec-review-codex` / `-local` — harden the *spec, before* any code exists.
-- `/architect-review` — *completeness & wiring* of the finished feature. This skill.
+- `/architect-review-pr` — *completeness & wiring* of the finished feature. This skill.
 
 **Why a fresh subagent (the adversarial mechanism).** The main loop *built* this code,
 so it shares the author's blind spots — the same gap in reasoning that left code unwired
@@ -72,7 +72,7 @@ proceeds **code-only**: completeness is judged purely from the code's own intern
 promises (referenced-but-missing, defined-but-unwired). **Note in the report whether an
 oracle was used.** The oracle is an enhancement, never a precondition.
 
-### Step 2 — Dispatch ONE architect-review subagent
+### Step 2 — Dispatch ONE architect-review-pr subagent
 
 Dispatch a single fresh subagent via the **Agent tool** (`subagent_type: general-purpose`).
 Compose the prompt from the template below, filling `<BASE>`, `<SCOPE>`, and `<ORACLE>`.
@@ -81,7 +81,7 @@ panel (see Deliberate simplifications).
 
 ### Step 3 — Report
 
-1. Write the subagent's returned markdown to `/tmp/architect-review-$(date +%s).md`
+1. Write the subagent's returned markdown to `/tmp/architect-review-pr-$(date +%s).md`
    (audit trail, never committed).
 2. Present the ranked findings in chat: the summary counts, the findings most-severe
    first, and the completeness verdict.
