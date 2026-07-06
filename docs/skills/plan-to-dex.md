@@ -1,0 +1,8 @@
+# `/plan-to-dex`
+
+Translates a Superpowers implementation plan into a [dex](https://github.com/francescoalemanno/dex)-compatible `plan.md`, imports it via `dex import`, and runs dex's `apply`/`review` loop end to end. Backend is fixed to codex (`dex --cli codex`); the skill sets no model and never writes `.dex/config.json`. One source Task = one `### Task N:` heading = one dex iteration. Output: `tasks/dex-plan.md`. Requires the `dex` and `codex` CLIs. Refuses to run `dex apply` on `main`/`master` — resolves a feature branch first.
+
+## Conventions
+
+- `/plan-to-dex` pins the dex backend to codex and never writes `.dex/config.json` — the model is codex's own default; dex owns all execution state under `.dex/`
+- BOTH `dex apply` and `dex review` are long-running (each exceeds the 10-min foreground Bash ceiling) — `/plan-to-dex` Step 6 mandates the same foreground poll-to-completion loop for each (re-run the phase, re-read `.dex/plan.md`, until all checkboxes `[x]` or terminal; `dex review`'s terminal includes the codex-quota case once apply is fully done and ≥1 reviewer pass has written findings) and forbids `run_in_background`/`Monitor`/"arm a watcher and yield". The guard has teeth via a **mandatory pre-return checklist** — the invocation must run and report `grep -c '\[ \]' .dex/plan.md` → `0`, `pgrep -fl 'dex --cli codex|codex exec'` empty, and per-task dex commits present before returning. `/ship-it`'s execute-and-report subagent prompt carries the identical FORBIDDEN list + pre-return checklist, because a subagent's backgrounded processes are reaped on return — backgrounding leaves only the dex setup commit
