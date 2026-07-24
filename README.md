@@ -20,7 +20,7 @@ Twelve skills, grouped by where they fit in a feature's life. Each is a slash co
 |---|---|---|
 | `/plan-to-dex` | Runs a hardened [Superpowers](https://github.com/obra/superpowers) plan through the dex orchestrator: translates it into dex's checkbox `plan.md` (one task = one iteration), then runs `dex apply` → `dex review` autonomously with Codex as the backend. | `dex` + `codex` |
 | `/swarm-execute` | Implements a feature as parallel user stories: Claude orchestrates via the Workflow tool, Codex workers write all code in isolated worktrees, architect + QA reviews gate every merge. Takes plain language or a spec file. | `codex` |
-| `/ship-it` | Pure conductor: spec → reviewed PR in one invocation. Chains `/spec-review-codex`, plan-writing, `/plan-to-dex`, PR creation, `/code-review high --fix` passes, and a closing `/architect-review-pr` completeness report. Autonomous, best-effort; records leftover findings instead of halting. | `codex`, `dex`, `commit-commands` |
+| `/ship-it` | Pure conductor: spec → reviewed PR in one invocation. Chains `/spec-review-codex`, plan-writing, `/plan-to-dex`, PR creation, `/review-pr` + fix passes, and a closing `/architect-review-pr` completeness report. Autonomous, best-effort; records leftover findings instead of halting. | `codex`, `dex`, `pr-review-toolkit`, `commit-commands` |
 
 ### Review — check the finished work
 
