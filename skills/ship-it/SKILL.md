@@ -12,15 +12,15 @@ Run the full feature pipeline from a thumbs-upped design spec to a reviewed pull
 
 **Policy:** fully autonomous, best-effort, **never halt on quality**. The only hard abort is a failed preflight. A non-clean *quality* outcome (open IMPORTANTs, review notes) is recorded and the chain continues. A hard failure that makes the next step *impossible* (e.g. zero code produced → nothing to commit) skips the now-impossible steps and jumps to the final report — it never fabricates a downstream artifact.
 
-**Underlying units (invoked live, never reimplemented):** `spec-review-codex`, `writing-plans`, `plan-to-dex`, `architect-review-pr`, and the built-in `code-review` skill (all via the Skill tool), plus the `/commit-commands:commit-push-pr` slash command.
+**Underlying units (invoked live, never reimplemented):** `spec-review-codex`, `writing-plans`, `plan-to-dex`, `architect-review-pr`, and the `/review-pr` panel (all invoked live — `/review-pr` is run *inside* the Step 6 subagent), plus the `/commit-commands:commit-push-pr` slash command. (Step 6 does **not** use the built-in `/code-review` — that skill is flagged `disable-model-invocation` and cannot be called programmatically from an autonomous run; `/review-pr` has no such flag and runs the full specialized-agent panel.)
 
 ---
 
 ## Step Isolation
 
-The heavy Skill steps (1, 2, 4) emit a lot of output — codex review iterations, the full plan, dex `apply`/`review` logs across every task. To keep that out of the conductor's context, **Steps 1, 2, and 4 run as execute-and-report subagents**: a subagent (the `Agent` tool) invokes the step's Skill *inside its own context*, absorbs all the raw output, and returns **only** the structured contract (`outcome` / `state` / `notes`). The conductor's context never holds the raw logs. (This works because an `Agent` subagent can invoke the `Skill` tool — verified.)
+The heavy steps (1, 2, 4, 6) emit a lot of output — codex review iterations, the full plan, dex `apply`/`review` logs across every task, and the `/review-pr` panel's finding-by-finding trace. To keep that out of the conductor's context, **Steps 1, 2, 4, and 6 run as subagents**: a subagent (the `Agent` tool) does the step's work *inside its own context*, absorbs all the raw output, and returns **only** the structured contract (`outcome` / `state` / `notes`). The conductor's context never holds the raw logs. (Steps 1/2/4 invoke the step's Skill inside the subagent — verified that an `Agent` subagent can call the `Skill` tool; Step 6's subagent runs the `/review-pr` panel and then applies the CRITICAL/IMPORTANT fixes itself.)
 
-Steps 3, 5, 6, 7 run in the main loop: Step 3 is two git commands (no context cost), Step 5 is outward-facing and cheap (you want PR creation visible), Step 6's `/code-review` already spawns its own finder and verifier subagents — wrapping it in another subagent would nest agents and hide the findings — and Step 7's `architect-review-pr` likewise dispatches its own fresh-context subagent, so the deep repo tracing already stays out of the conductor's context. After Step 6, dispatch one **boundary verifier** — a subagent that extracts the contract from the completed review without performing work — to collect leftover findings.
+Steps 3, 5, 7 run in the main loop: Step 3 is two git commands (no context cost), Step 5 is outward-facing and cheap (you want PR creation visible), and Step 7's `architect-review-pr` dispatches its own fresh-context subagent, so the deep repo tracing already stays out of the conductor's context. Step 6's fix loop (commit/push between passes) is driven by the conductor in the main loop, but each review-and-fix pass is a subagent whose contract *is* the leftover-findings report — no separate boundary verifier is needed. Because `/review-pr` itself launches analyzer agents via the `Task` tool, the Step 6 subagent may nest agents one level deeper; if this harness disallows a subagent spawning its own subagents, the subagent runs the review aspects inline in its own context instead (same findings, lower parallelism) — see its prompt.
 
 ---
 
@@ -32,11 +32,11 @@ Steps 3, 5, 6, 7 run in the main loop: Step 3 is two git commands (no context co
 4. Step 3 — Resolve a feature branch
 5. Step 4 — Execute via `plan-to-dex` (includes its final Opus review)
 6. Step 5 — Open the PR via `/commit-commands:commit-push-pr`
-7. Step 6 — Review + fix loop via `/code-review high --fix`
+7. Step 6 — Review + fix loop: a subagent runs the `/review-pr` panel and applies the CRITICAL/IMPORTANT fixes
 8. Step 7 — Architect completeness review via `architect-review-pr` (report-only)
 9. Emit the final report
 
-Pipeline state (spec path, plan path, branch, PR number, leftover findings) lives in **conversation memory and the subagent hand-offs** (the execute-and-report subagent or boundary-verifier returns — the same three-field contract) — never written to the workspace. The only persisted artifacts are the final report and Step 7's architect review report (both in the OS temp dir).
+Pipeline state (spec path, plan path, branch, PR number, leftover findings) lives in **conversation memory and the subagent hand-offs** (the execute-and-report and review-and-fix subagents return — the same three-field contract) — never written to the workspace. The only persisted artifacts are the final report and Step 7's architect review report (both in the OS temp dir).
 
 ---
 
@@ -46,8 +46,9 @@ Run these checks **before any mutation**. Preflight failure is the **only** hard
 
 1. **`codex` on PATH:** `command -v codex` — else STOP: "codex CLI not found; required by spec-review-codex and plan-to-dex."
 2. **`dex` on PATH:** `command -v dex` — else STOP: "dex not found. Install: `curl -sSfL https://raw.githubusercontent.com/francescoalemanno/dex/main/install.sh | bash`."
-3. **`commit-commands` plugin present:** the `/commit-commands:commit-push-pr` command file must exist on disk — `find ~/.claude/plugins -path '*commands/commit-push-pr.md' -print -quit | grep -q .` — else STOP: "commit-commands plugin not installed; required to open the PR." (A pre-check on disk is used because a slash command's resolvability cannot be tested without invoking it, and the early abort avoids running the whole pipeline only to fail at the PR step. The Step 6 reviewer needs no check — `code-review` is built into Claude Code.)
-4. **Spec located:** the argument is a path to a design spec; if omitted, find the newest `docs/superpowers/specs/*-design.md` and confirm it with the user before starting. If no file matches that glob, STOP and ask the user to provide the spec path explicitly.
+3. **`pr-review-toolkit` plugin present:** the `/review-pr` command file must exist on disk — `find ~/.claude/plugins -path '*commands/review-pr.md' -print -quit | grep -q .` — else STOP: "pr-review-toolkit plugin not installed; required for the Step 6 review." (Same disk pre-check rationale as below: a slash command's resolvability can't be tested without invoking it, and the early abort avoids running the whole pipeline only to fail at the review step.)
+4. **`commit-commands` plugin present:** the `/commit-commands:commit-push-pr` command file must exist on disk — `find ~/.claude/plugins -path '*commands/commit-push-pr.md' -print -quit | grep -q .` — else STOP: "commit-commands plugin not installed; required to open the PR." (A pre-check on disk is used because a slash command's resolvability cannot be tested without invoking it, and the early abort avoids running the whole pipeline only to fail at the PR step.)
+5. **Spec located:** the argument is a path to a design spec; if omitted, find the newest `docs/superpowers/specs/*-design.md` and confirm it with the user before starting. If no file matches that glob, STOP and ask the user to provide the spec path explicitly.
 
 On any STOP, print the missing item plus its remedy and exit without touching the repo.
 
@@ -62,10 +63,10 @@ On any STOP, print the missing item plus its remedy and exit without touching th
 | 3 | Resolve branch | conductor itself | on a non-`main`/`master` branch | branch name |
 | 4 | Execute | `Skill(plan-to-dex)` (incl. Opus review) | dex loop completes | dex status + diff summary |
 | 5 | Open PR | `/commit-commands:commit-push-pr` | PR created | PR number / URL |
-| 6 | Review loop | `/code-review high --fix` | clean, or capped at 3 passes | leftover findings |
+| 6 | Review loop | subagent runs `/review-pr` + applies fixes | clean, or capped at 3 passes | leftover findings |
 | 7 | Architect review | `Skill(architect-review-pr)` | report written (report-only) | architect findings |
 
-**Isolation:** Steps 1, 2, 4 run as execute-and-report subagents (raw output stays in the subagent); Steps 3, 5, 6, 7 run in the main loop (see Step Isolation).
+**Isolation:** Steps 1, 2, 4, 6 run as subagents (raw output stays in the subagent); Steps 3, 5, 7 run in the main loop, and Step 6's commit/push fix loop is driven by the conductor around its per-pass review-and-fix subagent (see Step Isolation).
 
 ---
 
@@ -99,12 +100,14 @@ Run the `/commit-commands:commit-push-pr` slash command to commit, push the bran
 
 ## Step 6: Review Loop
 
-Loop, up to **3 passes**:
-1. Invoke the built-in `code-review` skill with args `high --fix <PR#>` (the PR number from Step 5). The explicit target matters: after Step 5's push, the branch's default review range (`@{upstream}...HEAD`) is empty, so without the PR number there is nothing to review. `--fix` makes the skill apply its own verified findings to the working tree — the conductor does not re-fix them.
-2. If the review reports **no findings** → the PR is clean; exit the loop.
-3. Otherwise commit and push the applied fixes, then re-review. Findings the skill **skipped** (judged false-positive, behavior-changing, or out of diff scope) are recorded, not re-litigated.
+The built-in `/code-review` **cannot** be invoked from an autonomous run (it is flagged `disable-model-invocation`). Instead, each pass dispatches one **review-and-fix subagent** (see "Step Subagents") that runs the whole `/review-pr` panel against the PR, then applies **only** the CRITICAL and IMPORTANT findings to the working tree (leaving ADVISORY/MINOR). The subagent does **not** commit; the conductor owns the commit/push loop so the fixes land as real branch commits.
 
-After 3 passes, stop even if findings remain. Dispatch the **boundary verifier** (see "Step Subagents") to collect any leftover findings (file:line — summary, with verdict) for the final report.
+Loop, up to **3 passes**:
+1. Dispatch the review-and-fix subagent, giving it the PR number/URL from Step 5. The explicit PR target matters: after Step 5's push, the branch's default review range (`@{upstream}...HEAD`) is empty, so `/review-pr` reviews the PR's full diff vs its base, not that empty range.
+2. If the subagent **applied no fixes this pass** → exit the loop (an unchanged tree only re-yields the same result — leftover ADVISORY/MINOR or deliberately-skipped findings alone are terminal, not a reason to re-review).
+3. Otherwise the conductor commits and pushes the applied fixes, then re-dispatches (next pass). Findings the subagent **left** (ADVISORY/MINOR, or a CRITICAL/IMPORTANT it judged false-positive or out of diff scope) are recorded, not re-litigated.
+
+After 3 passes, stop even if findings remain. The subagent's returned contract already carries the leftover findings (file:line — summary, with severity) for the final report — no separate boundary verifier runs.
 
 ## Step 7: Architect Review
 
@@ -116,7 +119,7 @@ Because it reviews the **branch diff**, not the PR object, it runs even when Ste
 
 ## Step Subagents
 
-Every subagent — the three execute-and-report subagents (Steps 1/2/4) and the one boundary verifier (Step 6) — returns the same three-field contract:
+Every subagent — the three execute-and-report subagents (Steps 1/2/4) and the review-and-fix subagent (Step 6, one dispatch per pass) — returns the same three-field contract:
 
 - `outcome`: `clean` | `finished-with-notes` | `failed`
 - `state`: the artifact to hand forward (per-step below)
@@ -126,7 +129,7 @@ Every subagent — the three execute-and-report subagents (Steps 1/2/4) and the 
 - **Step 1 — spec review:** `state` = current (possibly rewritten) spec path; `notes` = open IMPORTANTs if the loop hit its cap.
 - **Step 2 — plan:** `state` = plan path.
 - **Step 4 — execution:** `state` = dex status + one-line diff summary; `notes` = any failed dex tasks.
-- **Step 6 — PR review:** `state` = PR URL; `notes` = leftover findings (unfixed or skipped) after 3 passes.
+- **Step 6 — PR review:** `state` = PR URL; `notes` = the CRITICAL/IMPORTANT findings applied this pass, plus leftover findings (ADVISORY/MINOR or a CRITICAL/IMPORTANT left unfixed) — each as `file:line — summary [severity]`. The conductor reads whether any fixes were applied to decide whether to commit/push and re-dispatch.
 
 ### Execute-and-report subagent prompt (Steps 1/2/4)
 
@@ -148,14 +151,15 @@ The subagent runs the step AND returns the contract — the raw output stays in 
 >
 > Then return **only** the three-field contract — `outcome` (`clean` | `finished-with-notes` | `failed`), `state` (<the artifact for this step>), `notes` (verbatim leftover CRITICAL/IMPORTANT or failure reason; empty if none). Do not paste the step's raw output, logs, or findings back — only the contract. If the step fails, write its full output tail to a temp file and put that path in `notes`.
 
-### Boundary verifier prompt (Step 6)
+### Review-and-fix subagent prompt (Step 6)
 
-The verifier reads the completed `/code-review` output and extracts state — it never performs the step's work:
+Dispatch a `general-purpose` subagent once per pass. It runs the whole `/review-pr` panel, applies the CRITICAL/IMPORTANT fixes, and returns the contract — the raw finding-by-finding trace stays in *its* context:
 
-> You are a boundary verifier. Read **only** the step output provided below — do not perform any work or run any commands beyond what is needed to read state. Return exactly three fields: `outcome` (`clean` | `finished-with-notes` | `failed`), `state` (the PR URL), `notes` (verbatim leftover findings — unfixed or skipped, as `file:line — summary [verdict]` — after 3 passes; empty if none).
+> You are the reviewer-fixer for one pass of an autonomous pipeline. Run the `/review-pr` slash command (`pr-review-toolkit:review-pr`) against PR <PR# / URL> and let its full specialized-agent panel complete. Review the PR's full diff versus its base branch, not the empty `@{upstream}...HEAD` range. (`/review-pr` launches its analyzers via the `Task` tool; if this environment does not let you, as a subagent, spawn your own subagents, then perform each of `/review-pr`'s review aspects yourself, inline in this context — do not skip the review.)
 >
-> Step output:
-> {paste the just-completed review output here}
+> Then fix the reported findings: apply a fix to the working tree for **every CRITICAL and IMPORTANT** finding, leaving ADVISORY/MINOR untouched. Skip a CRITICAL/IMPORTANT only if you judge it a false positive or outside the PR diff — and record why. Stay in scope: no behavior changes beyond each fix, nothing outside the PR diff. **Do NOT commit or push** — the conductor commits your applied fixes.
+>
+> Then return **only** the three-field contract — `outcome` (`clean` if the panel found no CRITICAL/IMPORTANT | `finished-with-notes` if you applied fixes or left findings | `failed`), `state` (the PR URL), `notes`: list each finding you **applied** and each you **left** as `file:line — summary [severity]` (empty only if the panel found nothing). Do not paste the raw review trace or diffs back — only the contract.
 
 Keep every subagent prompt scoped to one step so the conductor's own context stays lean.
 
