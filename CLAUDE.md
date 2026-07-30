@@ -29,6 +29,7 @@ Full detail + per-skill conventions are in `docs/skills/`. Read the one you're t
 | `/fusion` | `docs/skills/fusion.md` | Blind multi-model panel (Opus + Codex + local) → Opus judge synthesis |
 | `/ship-it` | `docs/skills/ship-it.md` | Pure conductor chaining the units into one spec→PR pipeline |
 | `/architect-review-pr` | `docs/skills/architect-review-pr.md` | Completeness & wiring review of a finished feature (report-only) |
+| `/blind-spot` | `docs/skills/blind-spot.md` | Unknown-unknowns pass *before* starting a task (report-only) |
 | `/review-codebase` | `docs/skills/review-codebase.md` | Three parallel whole-repo audits (codebase / docs / process) |
 | `/claude-md-slim` | `docs/skills/claude-md-slim.md` | Minimize this file — page per-skill detail out to `docs/` (inverse of claude-md-improver) |
 

@@ -42,17 +42,32 @@ Report-only keeps the skill small (no fix/re-review loop to port) and the findin
 
 1. **In a git repo?** Run `git rev-parse --is-inside-work-tree`. If it fails, STOP with:
    > "Not in a git repository — nothing to review."
-2. **An explicit argument overrides everything.** If the user named a target (a file, a
+2. **Split the argument before reading any of it as scope.** If it contains a
+   `report-path=<absolute path>` token (that is how `/ship-it` passes
+   `$RUN_DIR/architect-review.md`), take that as the report path and **remove it from the
+   argument**. Whatever remains — possibly nothing — is the scope. Doing this first is the
+   point: read in the other order, a caller's `report-path=…` looks exactly like "the user
+   named a target" in step 3, and the skill reviews its own output path instead of the branch.
+3. **An explicit argument overrides everything.** If what remains names a target (a file, a
    directory, or a feature description), that IS the scope — skip diff computation and
    review exactly what was named (still trace the whole repo for reachability).
-3. **Otherwise, scope to the branch diff.** Resolve the base branch: use `main` if it exists, else `master` (`git rev-parse --verify <name>`). Then compute:
+4. **Otherwise, scope to the branch diff.** Resolve the base branch: use `main` if it exists, else `master` (`git rev-parse --verify <name>`). Then compute:
    - changed-file list: `git diff --name-only <base>...HEAD`
    - full diff: `git diff <base>...HEAD`
 
    (Three-dot `<base>...HEAD` diffs against the merge-base — only what this branch
    changed, not unrelated drift on the base.)
-4. **No diff AND no argument** (you are on the base branch, or nothing is committed) →
-   **ask the user what to review.** This is the only blocking question — do not guess.
+5. **No diff AND no scope left after the split** (you are on the base branch, or nothing is
+   committed) → **ask the user what to review.** This is the only blocking question — do not
+   guess. A bare `report-path=…` with nothing else counts as "no argument": it says where to
+   write, never what to review.
+6. **Finish resolving the report path.** If step 2 found a `report-path=`, use it verbatim.
+   Otherwise mint it:
+   `REPORT_PATH="${TMPDIR:-/tmp}/architect-review-pr-$(date +%s).md"`. Hold it in a variable —
+   the same value goes into the subagent prompt and is read back in Step 3. **Never resolve
+   the report by globbing `architect-review-pr-*.md`**: a stale report from an earlier session
+   on a *different* branch satisfies that glob, and presenting it as this run's findings is a
+   worse failure than having no report at all.
 
 Announce the resolved scope in one line, then proceed:
 > "Architect-reviewing `<scope>`<, oracle: path | code-only>. Dispatching the subagent."
@@ -75,30 +90,38 @@ oracle was used.** The oracle is an enhancement, never a precondition.
 ### Step 2 — Dispatch ONE architect-review-pr subagent
 
 Dispatch a single fresh subagent via the **Agent tool** (`subagent_type: general-purpose`).
-Compose the prompt from the template below, filling `<BASE>`, `<SCOPE>`, and `<ORACLE>`.
-The subagent **reviews and reports only — it must edit nothing.** One subagent, not a
-panel (see Deliberate simplifications).
+Compose the prompt from the template below, filling `<BASE>`, `<SCOPE>`, `<ORACLE>`, and
+`<REPORT_PATH>`. The subagent **writes the report file itself and reports only — the report
+path is the one file it may create, and it must edit nothing else.** One subagent, not a panel
+(see Deliberate simplifications).
 
 ### Step 3 — Report
 
-1. Write the subagent's returned markdown to `/tmp/architect-review-pr-$(date +%s).md`
-   (audit trail, never committed).
-2. Present the ranked findings in chat: the summary counts, the findings most-severe
+1. **Read the report at `REPORT_PATH`** — the exact path from Step 0.5, not a glob. The
+   subagent authors that file; the conductor does not write it from the return message. A
+   subagent that completes its review and then idles without returning sends no message, so a
+   conductor that writes what it "received" produces **no report at all** — and one that globs
+   a timestamped pattern silently picks up another branch's stale report.
+2. **If `REPORT_PATH` does not exist**, say exactly that ("the subagent produced no report at
+   `<path>`") and stop. Do **not** re-dispatch, do not re-ask the subagent (a direct re-ask
+   does not recover a lost hand-off), and do not fall back to a glob.
+3. Present the ranked findings in chat: the summary counts, the findings most-severe
    first, and the completeness verdict.
-3. **STOP. Fix nothing.** If the user wants fixes applied, that is a separate, explicit
+4. **STOP. Fix nothing.** If the user wants fixes applied, that is a separate, explicit
    request — this skill's contract ends at the report.
 
 ---
 
 ## The subagent prompt
 
-Compose this at dispatch, substituting `<BASE>`, `<SCOPE>`, and `<ORACLE>`:
+Compose this at dispatch, substituting `<BASE>`, `<SCOPE>`, `<ORACLE>`, and `<REPORT_PATH>`:
 
 ```
 You are a fresh-context software architect reviewing a FINISHED implementation for
 COMPLETENESS and WIRING. You did not write this code and have no memory of how it was
-built — re-derive everything from the code itself. You are READ-ONLY: trace, reason,
-and report. Do not edit, create, or delete any file.
+built — re-derive everything from the code itself. You are READ-ONLY on the repository:
+trace, reason, and report. Do not edit or delete any file, and create exactly one — your
+report at <REPORT_PATH> (see Output). Nothing else.
 
 ## What to review (scope)
 
@@ -163,7 +186,20 @@ a finding. Cite the actual command you ran and show that it returned nothing.
 CRITICAL / IMPORTANT / ADVISORY / MINOR. Rank findings most-severe first. Severity is
 triage only; this skill fixes nothing, so severity gates nothing.
 
-## Output — return a single markdown document, and nothing else
+## Output — WRITE the report to <REPORT_PATH>, then return it
+
+Your report is delivered by **writing it to <REPORT_PATH>** with the `Write` tool. That exact
+absolute path, and no other. Returning the report as a message is NOT how it is delivered.
+
+Write it **incrementally, as you go**: create the file with the summary table as soon as you
+have your first finding, then append each finding as its evidence gate passes. Do not hold the
+report in your head until the end — if this invocation ends without the file on disk, the
+review is lost, and no one can ask you for it afterwards.
+
+When the file is complete, also return the same markdown as your final message (corroboration
+only — the file is what gets read).
+
+The document itself:
 
 1. Summary table: counts per severity, and whether an intent oracle was used.
 2. Findings, most-severe first. Each finding:
@@ -175,11 +211,15 @@ triage only; this skill fixes nothing, so severity gates nothing.
    - **Suggested fix**: one line, advisory only
 3. **Completeness verdict**: COMPLETE or GAPS FOUND, in one sentence.
 
-Your entire final message is this document — it is consumed as-is, not machine-parsed.
+The document is consumed as-is, not machine-parsed — but it is consumed **from the file**.
 ```
 
 The main loop does not parse the result beyond surfacing it — report-only means there is
-no machine-readable contract to enforce (unlike ship-it's three-field hand-off).
+no machine-readable contract to enforce. It does depend on `<REPORT_PATH>` existing, for the
+same reason ship-it's three-field hand-off is now written to a file: a subagent's final message
+is a single-delivery, unrecoverable channel that a completed-but-idled subagent never sends.
+The file is the carrier; the return is corroboration. (`review-codebase` has always worked this
+way — its audits write to `docs/audits/` and return only a summary.)
 
 ---
 

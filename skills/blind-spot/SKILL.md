@@ -46,16 +46,26 @@ convergence loop) and composable.
 
 ### Step 1 — Dispatch ONE blind-spot subagent
 
+**Mint the report path first, once:** `REPORT_PATH="${TMPDIR:-/tmp}/blind-spot-$(date +%s).md"`.
+Hold it in a variable — the same value is substituted into the prompt below and read back in
+Step 2. Never re-derive it, and never resolve the report by globbing `blind-spot-*.md`: a
+stale report from an earlier pass on a *different* task satisfies that glob and would be
+presented as this pass's findings.
+
 Dispatch a single fresh subagent via the **Agent tool** (`subagent_type: general-purpose`).
-Compose the prompt from the template below, filling `<TASK>` and `<EXPERIENCE>`. The
-subagent is **read-only**: it may Grep, Read, WebSearch, and WebFetch to investigate, but
-must **edit, create, or delete nothing**. One subagent, not a panel (see Deliberate
-simplifications).
+Compose the prompt from the template below, filling `<TASK>`, `<EXPERIENCE>`, and
+`<REPORT_PATH>`. The subagent **writes the report file itself** and is otherwise
+**read-only**: it may Grep, Read, WebSearch, and WebFetch to investigate, and `Write` only
+`<REPORT_PATH>` — it must **edit, create, or delete nothing else**. One subagent, not a panel
+(see Deliberate simplifications).
 
 ### Step 2 — Report
 
-1. Write the subagent's returned markdown to `/tmp/blind-spot-$(date +%s).md`
-   (uncommitted audit trail, never committed).
+1. Read the report the subagent wrote at `REPORT_PATH`. The subagent authors the file; do not
+   write it from the subagent's return message — a subagent that finishes its work but idles
+   without returning leaves no message to write, and the report would silently not exist.
+   If `REPORT_PATH` is missing, say so plainly ("the subagent produced no report") and stop —
+   do not re-dispatch and do not fall back to a glob.
 2. Present in chat: the summary counts, the findings **highest-impact first**, and the
    **sharpened brief**.
 3. **Offer** an HTML briefing: *"Want an HTML version to skim or share?"* — render it via
@@ -68,7 +78,7 @@ simplifications).
 
 ## The subagent prompt
 
-Compose this at dispatch, substituting `<TASK>` and `<EXPERIENCE>`:
+Compose this at dispatch, substituting `<TASK>`, `<EXPERIENCE>`, and `<REPORT_PATH>`:
 
 ```
 You are a fresh-context senior engineer and domain researcher running a BLIND-SPOT PASS
@@ -138,7 +148,20 @@ Rank findings by WOULD-CHANGE-YOUR-APPROACH impact: High / Medium / Low, highest
 The whole point is prioritizing unknowns whose answers change the architecture — impact
 sorts ABOVE finding type.
 
-## Output — return a single markdown document, and nothing else
+## Output — WRITE the report to a file, then return it
+
+Your report is delivered by **writing it to `<REPORT_PATH>`**, not by returning it. Use the
+`Write` tool on exactly that absolute path — it is the only file you may create.
+
+Write it **incrementally, as you go**: create the file with the summary table as soon as you
+have your first finding, then append each finding as you confirm it. Do not hold the whole
+report in your head until the end — if this invocation ends without the file, the report is
+lost, and returning it as a message is not a substitute.
+
+When the file is complete, also return the same markdown as your final message (corroboration
+— the file is what is read).
+
+The document itself:
 
 1. Summary table: counts per impact level, per taxonomy type, and whether the pass was
    codebase / domain / both.
@@ -152,11 +175,13 @@ sorts ABOVE finding type.
 3. **Sharpened brief**: 2–4 sentences the user can paste to start the real work with the
    top unknowns pre-resolved or explicitly deferred.
 
-Your entire final message is this document — it is consumed as-is, not machine-parsed.
+The document is consumed as-is, not machine-parsed — but it is consumed **from the file**.
 ```
 
 The main loop does not parse the result beyond surfacing it — report-only means there is
-no machine-readable contract to enforce.
+no machine-readable contract to enforce. It does, however, depend on the file existing: the
+subagent's final message is a single-delivery channel that a completed-but-idled subagent
+never sends, so `<REPORT_PATH>` is the durable carrier and the return is corroboration.
 
 ---
 
@@ -175,9 +200,9 @@ no machine-readable contract to enforce.
 - **One subagent, not a panel.** One well-prompted pass covers the taxonomy. Upgrade
   path: fan out one subagent per axis (domain vs. codebase) and merge — only if
   single-agent recall proves insufficient.
-- **Report-only, no interview loop.** The "interview me" follow-up stays a cheat-sheet
-  prompt (`docs/unknowns-cheatsheet.md`); folding it in would rebuild `/brainstorming`'s
-  dialogue machinery.
+- **Report-only, no interview loop.** The "interview me" follow-up stays a hand-written
+  cheat-sheet prompt rather than a skill feature; folding it in would rebuild
+  `/brainstorming`'s dialogue machinery.
 - **No CLI dependency.** Claude subagent over `codex`, so the skill installs anywhere.
 - **Git repo optional.** A pure-domain pass needs no repo; not gating on one keeps the
   color-grading case in scope.
@@ -189,5 +214,5 @@ no machine-readable contract to enforce.
 Synthesizes two field notes on working with Claude Fable: Thariq's *"A Field Guide to
 Fable: Finding Your Unknowns"* (the blind-spot pass and the known/unknown quadrant model)
 and Diego Marino's *Fable adversarial audits* gist (adversarial framing + evidence-gated,
-ID'd, impact-ranked findings). The reusable prompt library for the rest of the field
-guide's techniques lives in `docs/unknowns-cheatsheet.md`.
+ID'd, impact-ranked findings). Only the blind-spot pass is shipped as a skill; the field
+guide's other techniques are not bundled with this plugin.

@@ -68,9 +68,14 @@ state — the maintainer owns git. Leave the report uncommitted.
 Use this severity scale for every finding and in the summary counts: CRITICAL / IMPORTANT /
 ADVISORY / MINOR.
 
+Write the report INCREMENTALLY as you go — create the file as soon as you have your first
+finding and append each one as you confirm it. Do not compose the whole report at the end: if
+this invocation ends without the file on disk, the audit is lost, and nobody can ask you for it
+afterwards.
+
 Not done until the prompt's Output/stop criteria are met exactly as written. Return ONLY the
 short exec summary the prompt specifies (per-severity counts + top 3-5 findings + the report
-path) — the full detail lives in the file.
+path) — the full detail lives in the file, and the file is what the caller reads.
 ```
 
 The `process` audit is empirical: it builds throwaway workspaces under a gitignored dir and may
@@ -78,7 +83,21 @@ stub external binaries via PATH shims — that is expected and stays out of the 
 
 ### Step 2 — Consolidate
 
-Collect the three returned summaries and print one table:
+**Read each lens's report from its own path** — `docs/audits/<KIND>-audit-<DATE>.md`, which you
+fixed at Step 0 and passed into the prompt. Do not build the table from the subagents' returned
+summaries: a subagent that finishes its audit and then ends without a final message leaves no
+summary to collect, and the report on disk is complete regardless. The return is corroboration;
+the file is the deliverable.
+
+For each selected lens, `test -f` its report:
+
+- **Present** → take the counts and top findings from the file.
+- **Missing** → that audit produced nothing. Say so plainly in the table row and move on. Never
+  re-dispatch, and never substitute another lens's or an earlier run's report — a `<DATE>`-stamped
+  path from a previous audit of the same repo will happily exist and quietly report stale findings
+  as today's.
+
+Then print one table:
 
 | lens | CRITICAL | IMPORTANT | ADVISORY | MINOR | report |
 |------|---------:|----------:|---------:|------:|--------|
@@ -86,7 +105,7 @@ Collect the three returned summaries and print one table:
 | docs | … | … | … | … | `docs/audits/docs-audit-<DATE>.md` |
 | process | … | … | … | … | `docs/audits/process-audit-<DATE>.md` |
 
-Below it, list the top findings each audit surfaced (by ID). If a subagent failed or produced
+Below it, list the top findings each audit surfaced (by ID). If a lens's report file is absent — the only evidence that matters, whether or not its subagent returned anything — say so plainly. If a subagent failed or produced
 no report, say so plainly — do not fabricate a summary.
 
 ### Step 3 — Offer a fix pass (opt-in)
