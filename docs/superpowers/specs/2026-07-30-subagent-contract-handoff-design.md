@@ -102,11 +102,26 @@ summary"* rule to every step.
 
 | Step | Predicate that means *done* |
 |---|---|
-| 1 spec | spec file mtime newer than dispatch, and a `spec-review-findings-*` file exists |
-| 2 plan | `test -f <plan-path>` — already present, keep |
-| 4 execute | `git status --porcelain` + per-task dex commits in `git log` — already present, keep |
+| 1 spec | a `spec-review-findings-*` file whose mtime ≥ the dispatch timestamp |
+| 2 plan | `test -f <plan-path>`; on a lost contract, newest `docs/superpowers/plans/*.md` with mtime ≥ dispatch |
+| 4 execute | `git status --porcelain` non-empty **or** `HEAD` moved off the pre-dispatch SHA |
 | 6 review | `git status --porcelain` non-empty ⇒ fixes were applied *(this is what actually drove the MDZ-123 loop)* |
 | 7 architect | `test -f $RUN_DIR/architect-review.md` |
+
+Two rules govern predicate design, both found by self-review after the first draft:
+
+1. **Anchor every predicate to a value captured before dispatch** — an mtime, a commit SHA.
+   A bare existence check (`ls spec-review-findings-*`) or a bare `git log` grep is satisfied by
+   an artifact from a *previous run on a different ticket*: the stale-artifact bug this design
+   exists to kill, reintroduced in its own fix. Step 4 is the concrete case — Step 3 may reuse a
+   feature branch that already carries dex commits, so only the pre-dispatch SHA distinguishes
+   this run's work.
+2. **A predicate must prove the step RAN, not that it CHANGED something.** The first draft used
+   "spec mtime newer than dispatch" for Step 1 — but a PASS on iteration 1 rewrites nothing, so
+   the *best* outcome would have read as "no work" and, per row 4 of the divergence table,
+   skipped the rest of the pipeline. Anchor on the artifact the step always emits (the findings
+   file, written every iteration regardless of verdict); treat "the spec was rewritten" as a
+   separate, informational signal that must never gate control flow.
 
 ### `architect-review-pr` and `blind-spot`
 
