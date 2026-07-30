@@ -200,9 +200,9 @@ never sends, so `<REPORT_PATH>` is the durable carrier and the return is corrobo
 - **One subagent, not a panel.** One well-prompted pass covers the taxonomy. Upgrade
   path: fan out one subagent per axis (domain vs. codebase) and merge — only if
   single-agent recall proves insufficient.
-- **Report-only, no interview loop.** The "interview me" follow-up stays a cheat-sheet
-  prompt (`docs/unknowns-cheatsheet.md`); folding it in would rebuild `/brainstorming`'s
-  dialogue machinery.
+- **Report-only, no interview loop.** The "interview me" follow-up stays a hand-written
+  cheat-sheet prompt rather than a skill feature; folding it in would rebuild
+  `/brainstorming`'s dialogue machinery.
 - **No CLI dependency.** Claude subagent over `codex`, so the skill installs anywhere.
 - **Git repo optional.** A pure-domain pass needs no repo; not gating on one keeps the
   color-grading case in scope.
@@ -214,5 +214,5 @@ never sends, so `<REPORT_PATH>` is the durable carrier and the return is corrobo
 Synthesizes two field notes on working with Claude Fable: Thariq's *"A Field Guide to
 Fable: Finding Your Unknowns"* (the blind-spot pass and the known/unknown quadrant model)
 and Diego Marino's *Fable adversarial audits* gist (adversarial framing + evidence-gated,
-ID'd, impact-ranked findings). The reusable prompt library for the rest of the field
-guide's techniques lives in `docs/unknowns-cheatsheet.md`.
+ID'd, impact-ranked findings). Only the blind-spot pass is shipped as a skill; the field
+guide's other techniques are not bundled with this plugin.
