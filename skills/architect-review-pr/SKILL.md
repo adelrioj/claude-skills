@@ -42,21 +42,27 @@ Report-only keeps the skill small (no fix/re-review loop to port) and the findin
 
 1. **In a git repo?** Run `git rev-parse --is-inside-work-tree`. If it fails, STOP with:
    > "Not in a git repository — nothing to review."
-2. **An explicit argument overrides everything.** If the user named a target (a file, a
+2. **Split the argument before reading any of it as scope.** If it contains a
+   `report-path=<absolute path>` token (that is how `/ship-it` passes
+   `$RUN_DIR/architect-review.md`), take that as the report path and **remove it from the
+   argument**. Whatever remains — possibly nothing — is the scope. Doing this first is the
+   point: read in the other order, a caller's `report-path=…` looks exactly like "the user
+   named a target" in step 3, and the skill reviews its own output path instead of the branch.
+3. **An explicit argument overrides everything.** If what remains names a target (a file, a
    directory, or a feature description), that IS the scope — skip diff computation and
    review exactly what was named (still trace the whole repo for reachability).
-3. **Otherwise, scope to the branch diff.** Resolve the base branch: use `main` if it exists, else `master` (`git rev-parse --verify <name>`). Then compute:
+4. **Otherwise, scope to the branch diff.** Resolve the base branch: use `main` if it exists, else `master` (`git rev-parse --verify <name>`). Then compute:
    - changed-file list: `git diff --name-only <base>...HEAD`
    - full diff: `git diff <base>...HEAD`
 
    (Three-dot `<base>...HEAD` diffs against the merge-base — only what this branch
    changed, not unrelated drift on the base.)
-4. **No diff AND no argument** (you are on the base branch, or nothing is committed) →
-   **ask the user what to review.** This is the only blocking question — do not guess.
-5. **Resolve the report path, once.** A caller can supply it as `report-path=<absolute path>`
-   (that is how `/ship-it` passes `$RUN_DIR/architect-review.md`); strip that token from the
-   argument before interpreting anything else as scope, so a report path is never mistaken for
-   a review target and vice versa. If one was supplied, use it verbatim. Otherwise mint it:
+5. **No diff AND no scope left after the split** (you are on the base branch, or nothing is
+   committed) → **ask the user what to review.** This is the only blocking question — do not
+   guess. A bare `report-path=…` with nothing else counts as "no argument": it says where to
+   write, never what to review.
+6. **Finish resolving the report path.** If step 2 found a `report-path=`, use it verbatim.
+   Otherwise mint it:
    `REPORT_PATH="${TMPDIR:-/tmp}/architect-review-pr-$(date +%s).md"`. Hold it in a variable —
    the same value goes into the subagent prompt and is read back in Step 3. **Never resolve
    the report by globbing `architect-review-pr-*.md`**: a stale report from an earlier session

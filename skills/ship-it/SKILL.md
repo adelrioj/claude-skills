@@ -54,7 +54,7 @@ Run these checks **before any mutation**. Preflight failure is the **only** hard
 
 On any STOP, print the missing item plus its remedy and exit without touching the repo.
 
-**Then mint the run directory, once:** `RUN_DIR=$(mktemp -d -t ship-it)`. Print it. Every step contract, the architect report, and the final report live here — **each at a path the conductor fixes up front and passes to the subagent**. Hold `$RUN_DIR` for the whole run and never re-derive it. Never locate any of these artifacts by globbing a timestamped pattern: a stale file from an earlier run on a *different* ticket satisfies the glob, and adopting it silently is worse than having no artifact at all.
+**Then mint the run directory, once:** `RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ship-it-XXXXXX")` — spell the template out rather than using `mktemp -d -t ship-it`, which is BSD-only (GNU `mktemp` rejects a template with no `X`s). Print it. Every step contract, the architect report, and the final report live here — **each at a path the conductor fixes up front and passes to the subagent**. Hold `$RUN_DIR` for the whole run and never re-derive it. Never locate any of these artifacts by globbing a timestamped pattern: a stale file from an earlier run on a *different* ticket satisfies the glob, and adopting it silently is worse than having no artifact at all.
 
 ---
 
@@ -76,7 +76,7 @@ On any STOP, print the missing item plus its remedy and exit without touching th
 
 | Step | Contract / report path | Ground-truth predicate the conductor checks itself |
 |---|---|---|
-| 1 | `$RUN_DIR/step-1.contract.md` | a `spec-review-findings-*` file **whose mtime postdates dispatch** exists |
+| 1 | `$RUN_DIR/step-1.contract.md` | a `/tmp/spec-review-findings-*` file (literal `/tmp`, see Step 1) **whose mtime postdates dispatch** exists |
 | 2 | `$RUN_DIR/step-2.contract.md` | `test -f <plan-path>` |
 | 4 | `$RUN_DIR/step-4.contract.md` | `git status --porcelain` non-empty **or** `git rev-parse HEAD` differs from the pre-dispatch commit |
 | 6 | `$RUN_DIR/step-6.pass-<N>.contract.md` | `git status --porcelain` non-empty ⇒ fixes were applied this pass |
@@ -98,7 +98,9 @@ Dispatch an execute-and-report subagent (see "Step Subagents") with contract pat
 
 Then read the contract file and check the predicate yourself:
 
-- **Did the review run?** A `spec-review-findings-*` file exists in the temp dir with mtime **≥ `T0`**. `spec-review-codex` writes one per iteration whether it PASSes or finds problems, so this is the signal that holds in every outcome. The mtime bound is load-bearing — without it, a findings file left over from an earlier run on a different spec satisfies the check.
+- **Did the review run?** A file matching **`/tmp/spec-review-findings-*`** exists with mtime **≥ `T0`**. `spec-review-codex` writes one per iteration whether it PASSes or finds problems, so this is the signal that holds in every outcome.
+  - **The literal `/tmp` is not a typo — do not "normalize" it to `$TMPDIR` or `${TMPDIR:-/tmp}`.** `spec-review-codex` and `spec-review-local` both hardcode `FINDINGS_FILE="/tmp/spec-review-findings-$(date +%s).md"`, while `$TMPDIR` on macOS is `/var/folders/…/T/`. Looking in the wrong directory makes a *successful* review read as "nothing happened" — and if the contract is also lost (the exact case this design exists for), that lands on divergence row 4 and aborts Steps 2-7. Match the producer's path, not the local convention. If `spec-review-*` ever changes where it writes, this predicate changes with it.
+  - The mtime bound is equally load-bearing — without it, a findings file left over from an earlier run on a different spec satisfies the check.
 - **Were fixes applied?** The spec's mtime is newer than its pre-dispatch value. This is **informational only** — a PASS on the first iteration rewrites nothing, and an unchanged spec is the *best* outcome, never evidence that the step failed. Never gate control flow on it.
 
 If the contract is missing but the review demonstrably ran, record `finished-with-notes (contract lost — spec reviewed, findings not summarized)` and carry the spec path forward unchanged. Record whatever you have; **continue regardless** (never halt on quality).
@@ -107,7 +109,9 @@ If the contract is missing but the review demonstrably ran, record `finished-wit
 
 Dispatch an execute-and-report subagent with contract path `$RUN_DIR/step-2.contract.md`, that runs `Skill(writing-plans)` on the **hardened** spec from Step 1 and writes the plan path as `state`. This is the earliest generative step — do not re-brainstorm or re-interview. `writing-plans` writes to `docs/superpowers/plans/YYYY-MM-DD-<feature>.md`.
 
-Read the contract, then confirm the plan on disk yourself: `test -f <plan-path>`. If the contract is missing, recover the path from the predicate — the newest `docs/superpowers/plans/*.md` **whose mtime postdates this step's dispatch** — and record `finished-with-notes (contract lost — plan path recovered from disk)`. The mtime bound is what makes this recovery safe rather than a repeat of the stale-artifact bug: without it, a plan from an earlier feature is the newest match and the pipeline would go on to implement the wrong thing. If nothing matches (hard failure), skip to the final report (Steps 3-6 are impossible without a plan).
+Read the contract, then confirm the plan on disk yourself: `test -f <plan-path>`. If the contract is missing, recover the path from the predicate — the newest `docs/superpowers/plans/*.md` **whose mtime postdates this step's dispatch** — and record `finished-with-notes (contract lost — plan path recovered from disk)`. The mtime bound is what makes this recovery safe rather than a repeat of the stale-artifact bug: without it, a plan from an earlier feature is the newest match and the pipeline would go on to implement the wrong thing.
+
+**No plan file on disk is a hard failure regardless of what the contract says.** A contract that reports a plan path which `test -f` cannot find is *not* the ordinary "predicate disagrees" case — trusting the predicate here means accepting that no plan exists, and Steps 3-6 are impossible without one. Skip to the final report. Never dispatch Step 4 with a plan path you have just proven absent.
 
 ## Step 3: Resolve the Branch
 

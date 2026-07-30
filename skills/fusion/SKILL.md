@@ -54,15 +54,25 @@ Launch every seat for `$SLUG` at once, each blind to the others. Use a per-run i
 timestamp) so temp files never collide.
 
 - **Opus seats** (always 1, or 2 in `opus-opus`): dispatch each as an Agent subagent, handing it
-  the user's task verbatim with instructions to use web search + bash and return only its answer.
-  Do not let subagents see each other's work.
+  the user's task verbatim with instructions to use web search + bash. Tell each seat to
+  **`Write` its answer to `/tmp/fusion-$RUN-opus<N>.md`** (N = 1, 2) and then return it as its
+  final message; read the file, not the message. Do not let subagents see each other's work.
+
+  The file is not decoration: a subagent's final message is a single-delivery channel that a
+  seat which finishes and idles never sends, and in `opus-opus` mode *both* panelists use it,
+  so the entire panel can come back empty. The CLI seats below have always been safe for this
+  reason — `run_codex.sh` / `run_local.sh` write files — and the Opus seats are the ones that
+  were not. (Same fix as ship-it's contract-as-file; see `docs/skills/ship-it.md`.)
 - **GPT-5.5 seat** (`opus-codex`, `opus-codex-local`): run
   `scripts/run_codex.sh "$PROMPT_FILE" /tmp/fusion-$RUN-codex.md` in the background.
 - **Local seat** (`opus-codex-local`): run
   `scripts/run_local.sh "$PROMPT_FILE" /tmp/fusion-$RUN-local.md` in the background.
 
-Wait for all to finish. Any seat whose runner exited non-zero is **dropped** — note it and
-continue with whatever answers landed.
+Wait for all to finish, then collect every seat **from its file** — `/tmp/fusion-$RUN-opus<N>.md`,
+`-codex.md`, `-local.md`. A seat is **dropped** if its runner exited non-zero *or* its file is
+missing or empty; that second condition is what covers the Opus seats, which have no runner exit
+code to check. Note every drop and continue with whatever answers landed — a panel of one is a
+degraded answer, but silently judging a panel you think is full is a wrong one.
 
 ## Step 3 — Judge
 

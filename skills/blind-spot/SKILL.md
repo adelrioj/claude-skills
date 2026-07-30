@@ -78,7 +78,7 @@ Compose the prompt from the template below, filling `<TASK>`, `<EXPERIENCE>`, an
 
 ## The subagent prompt
 
-Compose this at dispatch, substituting `<TASK>` and `<EXPERIENCE>`:
+Compose this at dispatch, substituting `<TASK>`, `<EXPERIENCE>`, and `<REPORT_PATH>`:
 
 ```
 You are a fresh-context senior engineer and domain researcher running a BLIND-SPOT PASS

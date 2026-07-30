@@ -47,11 +47,25 @@ channel and gets nothing.
   report for the wrong feature and presents it as this run's findings.
 - `blind-spot` Step 2 carries the identical construction.
 
-Audited and **not** affected: `spec-review-codex`, `spec-review-local` and `fusion` write their
-findings files from the `codex` / `pi` CLIs, not from a subagent return. `plan-to-dex` has no
-report hand-off. `review-codebase` **already uses the correct pattern** — its subagents are told
-*"Write the full report to `docs/audits/<KIND>-audit-<DATE>.md`"* and return only a short
-summary.
+- `fusion` Step 2: its **Opus seats** are `Agent` subagents told to "return only its answer" —
+  no file. In `opus-opus` mode *both* panelists use that channel, so the whole panel can come
+  back empty. Its CLI seats are safe because `run_codex.sh` / `run_local.sh` write files.
+
+Audited and **not** affected: `spec-review-codex` and `spec-review-local` write their findings
+files from the `codex` / `pi` CLIs, not from a subagent return. `plan-to-dex` has no report
+hand-off. `swarm-execute` returns through Workflow schemas. `review-codebase` **already uses the
+correct pattern** for its reports — its subagents are told *"Write the full report to
+`docs/audits/<KIND>-audit-<DATE>.md`"* and return only a short summary (though its own
+consolidation step still reads "the three returned summaries" rather than those known paths — a
+smaller instance of the same issue, left for a follow-up).
+
+> **Classify by the right axis.** A first pass of this audit sorted skills by *what produces the
+> artifact* (CLI → safe, subagent → broken) and cleared `fusion` on that basis. The axis that
+> actually matters is *how the conductor obtains the result*: **file → safe, return message →
+> broken**. `fusion` is mixed-mode **per seat**, so a per-skill verdict could not see it. This
+> was caught by running the fixed `/architect-review-pr` against this very branch — the fresh
+> subagent found what the spec's own self-audit could not, which is the independence argument
+> the skill exists to make.
 
 ---
 
@@ -67,7 +81,8 @@ to the two skills that never got it.
 
 ```
 Conductor (ship-it)
-  RUN_DIR=$(mktemp -d -t ship-it)        # one dir per run, minted at preflight
+  RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ship-it-XXXXXX")   # one dir per run, at preflight
+                                         # spelled-out template: `-t ship-it` is BSD-only
   ...
   Step N:
     CONTRACT=$RUN_DIR/step-N.contract.md
@@ -102,7 +117,7 @@ summary"* rule to every step.
 
 | Step | Predicate that means *done* |
 |---|---|
-| 1 spec | a `spec-review-findings-*` file whose mtime ≥ the dispatch timestamp |
+| 1 spec | a **`/tmp/`**`spec-review-findings-*` file whose mtime ≥ the dispatch timestamp |
 | 2 plan | `test -f <plan-path>`; on a lost contract, newest `docs/superpowers/plans/*.md` with mtime ≥ dispatch |
 | 4 execute | `git status --porcelain` non-empty **or** `HEAD` moved off the pre-dispatch SHA |
 | 6 review | `git status --porcelain` non-empty ⇒ fixes were applied *(this is what actually drove the MDZ-123 loop)* |
@@ -122,6 +137,17 @@ Two rules govern predicate design, both found by self-review after the first dra
    skipped the rest of the pipeline. Anchor on the artifact the step always emits (the findings
    file, written every iteration regardless of verdict); treat "the spec was rewritten" as a
    separate, informational signal that must never gate control flow.
+3. **Match the producer's literal path, not the local convention.** Step 1's predicate says
+   `/tmp/spec-review-findings-*` because `spec-review-codex` and `spec-review-local` hardcode
+   `FINDINGS_FILE="/tmp/…"`, while `$TMPDIR` on macOS is `/var/folders/…/T/`. "Normalizing" the
+   predicate to `${TMPDIR:-/tmp}` looks tidier and makes a successful review read as "nothing
+   happened" — which, with a lost contract, aborts Steps 2-7. Both conventions coexist in this
+   repo, so a predicate must name the directory its producer actually writes to.
+
+   This one is instructive about the shape of the whole bug: the design eliminated glob-based
+   *report resolution* but left a glob-based *predicate* pointed at an ambiguous directory.
+   **Delivery and detection are separate failure surfaces** that merely rhyme; fixing one does
+   not fix the other.
 
 ### `architect-review-pr` and `blind-spot`
 
@@ -158,6 +184,7 @@ the conductor's context.
 | `skills/ship-it/SKILL.md` | `RUN_DIR` at preflight; contract-as-file in the Step Subagents section and both subagent prompts; per-step predicates; divergence handling; "idle ≠ completion" |
 | `skills/architect-review-pr/SKILL.md` | Step 3 inversion; `<REPORT_PATH>` in the prompt template; glob removed |
 | `skills/blind-spot/SKILL.md` | Same inversion in Step 2 |
+| `skills/fusion/SKILL.md` | Opus seats write `/tmp/fusion-$RUN-opus<N>.md`; drop rule covers a missing/empty file, not just a runner exit code |
 | `docs/skills/ship-it.md` | Conventions updated to describe the file channel |
 | `docs/skills/architect-review-pr.md` | Same |
 | `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` | Paired bump to `1.2.12` |
