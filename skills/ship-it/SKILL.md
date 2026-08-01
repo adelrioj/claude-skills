@@ -193,7 +193,7 @@ The subagent runs the step AND writes the contract — the raw output stays in *
 > Run the step's own poll-to-completion loop **foreground** until it is genuinely done. To wait on a foreground pid, block on it directly (`wait <pid>`, or `while kill -0 <pid> 2>/dev/null; do sleep 15; done`) — never rely on any waiter or `Monitor` to resume you.
 >
 > **Pre-return verification (mandatory) — run these and confirm before returning; if any fails, keep looping:**
-> - **No live worker:** `pgrep -fl 'dex --cli codex|codex exec'` prints nothing.
+> - **No live worker _in this worktree_:** `pgrep -f '[d]ex --cli codex|[c]odex exec' | while read -r p; do lsof -a -d cwd -p "$p" -Fn 2>/dev/null | grep -q "^n$(pwd -P)" && echo "live worker $p"; done` prints nothing. The `lsof -d cwd` filter and the bracketed first characters are both required: a bare `pgrep -fl 'dex --cli codex|codex exec'` matches concurrent `/ship-it` runs in sibling worktrees *and* the shell running the check itself, so it can never pass. **Never kill, signal, or wait on a process you did not start** — a sibling run's dex is not yours to reap.
 > - **Step 4 (dex) only:** `grep -c '\[ \]' .dex/plan.md` prints `0` (or dex reported a terminal `STALEMATE`/quota state you name), AND `git log --oneline` shows per-task dex commits, not just the lone `dex import` setup commit.
 > - **The step's own output declares completion** (spec-review PASS/cap, plan file written, or dex loop terminal) — not "in progress".
 >

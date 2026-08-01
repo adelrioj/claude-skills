@@ -163,7 +163,19 @@ Backgrounded work dies the instant this invocation (especially a subagent) retur
 Do NOT return until you have **run these three checks and can state their results**. If any check fails, keep looping — returning early is a bug, not a shortcut:
 
 1. **Plan done:** `grep -c '\[ \]' .dex/plan.md` prints `0` — every checkbox is `[x]` (or dex printed a terminal `STALEMATE`/quota state, which you name explicitly).
-2. **No live worker:** `pgrep -fl 'dex --cli codex|codex exec'` prints **nothing** — no dex/codex process is still running.
+2. **No live worker _in this worktree_:**
+
+   ```bash
+   pgrep -f '[d]ex --cli codex|[c]odex exec' | while read -r p; do
+     lsof -a -d cwd -p "$p" -Fn 2>/dev/null | grep -q "^n$(pwd -P)" && echo "live worker $p"
+   done
+   ```
+
+   prints **nothing**. Two details are load-bearing, and a bare `pgrep -fl 'dex --cli codex|codex exec'` gets both wrong:
+   - **Scope to your own worktree.** Concurrent `/ship-it` runs in sibling worktrees have their own `dex --cli codex apply` and `codex exec` processes. A machine-wide `pgrep` sees them, reports a "live worker" that is not yours, and makes this check permanently unsatisfiable. The `lsof -d cwd` filter keeps only processes whose working directory is under this worktree.
+   - **Bracket the first character** (`[d]ex`, `[c]odex`). Without it the pattern matches the command line of the shell running the check — the check reports itself as a live worker and never passes.
+
+   **Never kill, signal, or wait on a process you did not start.** A sibling run's dex is not your problem, and killing it corrupts that run. If this check still prints after your own foreground `dex` command returned, you backgrounded it — that is the only failure it is looking for.
 3. **Commits landed:** `git log --oneline` shows per-task dex commits (not just the lone `dex import` setup commit), and `git status` is as expected.
 
 - If `dex apply` prints `STALEMATE` or exits non-zero, STOP — report dex's output verbatim and do NOT run `dex review`.
