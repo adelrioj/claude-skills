@@ -151,6 +151,8 @@ Both phases drive codex through work that **will likely exceed a single foregrou
 
 **`dex review`:** the same loop — re-run `dex --cli codex review` foreground at max timeout every time the 10-min ceiling truncates it, until it reaches a terminal state: it prints its completion line (`Review complete` / `DONE`) and/or writes `.dex/review-*.md`, or reports a terminal `STALEMATE` / non-zero exit. **Terminal on quota:** if codex exhausts its usage quota *after* apply is fully done (every `.dex/plan.md` checkbox `[x]`) and at least one reviewer pass has written its findings, treat the quota state as terminal — report it and stop. Do NOT loop forever on quota backoff.
 
+> ⚠️ **Co-edit warning:** the FORBIDDEN list and the pre-return verification below are duplicated **verbatim** into `/ship-it`'s execute-and-report subagent prompt (`skills/ship-it/SKILL.md`) and summarized in `docs/skills/plan-to-dex.md`. `/ship-it` must carry its own copy — the guard binds the *invoking subagent*, whose backgrounded processes are reaped on return, not the skill it invokes. Touch any of the three and touch all three: `grep -rn '\[d\]ex --cli codex' skills/ docs/` finds every site.
+
 **FORBIDDEN — no escape hatches (this is exactly where past runs failed):**
 - **Never** run `dex apply` or `dex review` with `run_in_background: true`.
 - **Never** arm a `Monitor` / waiter / `ScheduleWakeup` to "come back later" — nothing re-invokes a returned invocation, so the child is reaped and only the `dex import` setup commit lands.
