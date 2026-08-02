@@ -48,13 +48,31 @@ Run these checks **before any mutation**. Preflight failure is the **only** hard
 
 1. **`codex` on PATH:** `command -v codex` — else STOP: "codex CLI not found; required by spec-review-codex and plan-to-dex."
 2. **`dex` on PATH:** `command -v dex` — else STOP: "dex not found. Install: `curl -sSfL https://raw.githubusercontent.com/francescoalemanno/dex/main/install.sh | bash`."
-3. **`pr-review-toolkit` plugin present:** the `/review-pr` command file must exist on disk — `find ~/.claude/plugins -path '*commands/review-pr.md' -print -quit | grep -q .` — else STOP: "pr-review-toolkit plugin not installed; required for the Step 6 review." (Same disk pre-check rationale as below: a slash command's resolvability can't be tested without invoking it, and the early abort avoids running the whole pipeline only to fail at the review step.)
-4. **`commit-commands` plugin present:** the `/commit-commands:commit-push-pr` command file must exist on disk — `find ~/.claude/plugins -path '*commands/commit-push-pr.md' -print -quit | grep -q .` — else STOP: "commit-commands plugin not installed; required to open the PR." (A pre-check on disk is used because a slash command's resolvability cannot be tested without invoking it, and the early abort avoids running the whole pipeline only to fail at the PR step.)
-5. **Spec located:** the argument is a path to a design spec; if omitted, find the newest `docs/superpowers/specs/*-design.md` and confirm it with the user before starting. If no file matches that glob, STOP and ask the user to provide the spec path explicitly.
+3. **Required plugins installed:** `pr-review-toolkit` (Step 6's `/review-pr`), `commit-commands` (Step 5's PR), and `superpowers` (Step 2's `writing-plans`). Check the **install registry**, not the filesystem:
+
+   ```bash
+   for p in pr-review-toolkit commit-commands superpowers; do
+     jq -e --arg p "$p" '[.plugins | keys[] | select(startswith($p + "@"))] | length > 0' \
+       ~/.claude/plugins/installed_plugins.json >/dev/null || echo "MISSING: $p"
+   done
+   ```
+
+   Any `MISSING` line → STOP naming the plugin and what it is needed for. **Do not check with `find ~/.claude/plugins -path '*commands/<cmd>.md'`** — that matches copies inside the `marketplaces/` clones and stale `cache/` versions, so it passes for *any* plugin the marketplace carries whether installed or not, converting a fast preflight abort into a late Step 2/5/6 failure. `installed_plugins.json` (keys are `<name>@<marketplace>`) is the ground truth. If that file does not exist (older Claude Code), fall back to the `find` check and note the weaker signal.
+
+   A pre-check is used at all because a slash command's or skill's resolvability cannot be tested without invoking it, and the early abort avoids running the whole pipeline only to fail at the step that needs it. `superpowers` is easy to forget here — `writing-plans` is the one unit that is not part of this plugin, so its absence otherwise surfaces only after a full codex spec-review has already been spent.
+4. **Spec located:** the argument is a path to a design spec; if omitted, find the newest `docs/superpowers/specs/*-design.md` and confirm it with the user before starting. If no file matches that glob, STOP and ask the user to provide the spec path explicitly.
 
 On any STOP, print the missing item plus its remedy and exit without touching the repo.
 
-**Then mint the run directory, once:** `RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ship-it-XXXXXX")` — spell the template out rather than using `mktemp -d -t ship-it`, which is BSD-only (GNU `mktemp` rejects a template with no `X`s). Print it. Every step contract, the architect report, and the final report live here — **each at a path the conductor fixes up front and passes to the subagent**. Hold `$RUN_DIR` for the whole run and never re-derive it. Never locate any of these artifacts by globbing a timestamped pattern: a stale file from an earlier run on a *different* ticket satisfies the glob, and adopting it silently is worse than having no artifact at all.
+**Advisory check (warn, never abort) — can the active `gh` account open the PR?**
+
+```bash
+gh repo view --json viewerPermission -q .viewerPermission
+```
+
+If it prints anything other than `ADMIN` / `MAINTAIN` / `WRITE` (or errors), print a warning up front: *"the active `gh` account lacks write access here — Step 5 will fail with `GraphQL: must be a collaborator`; switch accounts before the run, or expect a no-PR outcome."* Then **continue** — the run still produces a hardened spec, a plan, committed code on a branch, and the Step 7 architect review, so a missing PR is a skipped step, not a reason to abort. This check exists because `gh` account state is *global machine state*, invisible in the repo, and its failure otherwise surfaces an hour into the pipeline where it reads as a conductor bug. The conductor never switches accounts itself — that mutates state outside the repo and outside the user's request.
+
+**Then mint the run directory, once.** If the harness gives this session a scratchpad directory, mint it **there** — `RUN_DIR=$(mktemp -d "<scratchpad>/ship-it-XXXXXX")` — because scratchpad writes are pre-approved, while a path under `/tmp` is neither the workspace nor the scratchpad and can require permission approval in modes short of `bypassPermissions`/`acceptEdits`. **A permission prompt inside an unattended subagent is a stall that produces no contract at all** — the exact failure this whole design exists to prevent, arriving through the door marked "safe". With no scratchpad available, fall back to `RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ship-it-XXXXXX")`; spell the template out rather than using `mktemp -d -t ship-it`, which is BSD-only (GNU `mktemp` rejects a template with no `X`s). Print it. Every step contract, the architect report, and the final report live here — **each at a path the conductor fixes up front and passes to the subagent**. Hold `$RUN_DIR` for the whole run and never re-derive it. Never locate any of these artifacts by globbing a timestamped pattern: a stale file from an earlier run on a *different* ticket satisfies the glob, and adopting it silently is worse than having no artifact at all.
 
 ---
 
@@ -62,13 +80,13 @@ On any STOP, print the missing item plus its remedy and exit without touching th
 
 | # | Step | Unit invoked | Success bar | State handed forward |
 |---|------|-------------|-------------|----------------------|
-| 1 | Harden spec | `Skill(spec-review-codex)` | PASS, or 3-iteration cap | (possibly rewritten) spec path |
-| 2 | Write plan | `Skill(writing-plans)` | plan file written | plan path |
+| 1 | Harden spec | `Skill(claude-skills:spec-review-codex)` | PASS, or 3-iteration cap | (possibly rewritten) spec path |
+| 2 | Write plan | `Skill(superpowers:writing-plans)` | plan file written | plan path |
 | 3 | Resolve branch | conductor itself | on a non-`main`/`master` branch | branch name |
-| 4 | Execute | `Skill(plan-to-dex)` (incl. Opus review) | dex loop completes | dex status + diff summary |
+| 4 | Execute | `Skill(claude-skills:plan-to-dex)` (incl. Opus review) | dex loop completes | dex status + diff summary |
 | 5 | Open PR | `/commit-commands:commit-push-pr` | PR created | PR number / URL |
 | 6 | Review loop | subagent runs `/review-pr` + applies fixes | clean, or capped at 3 passes | leftover findings |
-| 7 | Architect review | `Skill(architect-review-pr)` | report written (report-only) | architect findings |
+| 7 | Architect review | `Skill(claude-skills:architect-review-pr)` | report written (report-only) | architect findings |
 
 **Isolation:** Steps 1, 2, 4, 6 run as subagents (raw output stays in the subagent); Steps 3, 5, 7 run in the main loop, and Step 6's commit/push fix loop is driven by the conductor around its per-pass review-and-fix subagent (see Step Isolation).
 
@@ -78,8 +96,8 @@ On any STOP, print the missing item plus its remedy and exit without touching th
 |---|---|---|
 | 1 | `$RUN_DIR/step-1.contract.md` | a `/tmp/spec-review-findings-*` file (literal `/tmp`, see Step 1) **whose mtime postdates dispatch** exists |
 | 2 | `$RUN_DIR/step-2.contract.md` | `test -f <plan-path>` |
-| 4 | `$RUN_DIR/step-4.contract.md` | `git status --porcelain` non-empty **or** `git rev-parse HEAD` differs from the pre-dispatch commit |
-| 6 | `$RUN_DIR/step-6.pass-<N>.contract.md` | `git status --porcelain` non-empty ⇒ fixes were applied this pass |
+| 4 | `$RUN_DIR/step-4.contract.md` | commits after `HEAD_0`, **or** working-tree changes — in both cases *excluding* the pipeline's own by-products (see Step 4) |
+| 6 | `$RUN_DIR/step-6.pass-<N>.contract.md` | `git status --porcelain` **differs from the pre-dispatch snapshot** ⇒ fixes were applied this pass |
 | 7 | `$RUN_DIR/architect-review.md` | `test -f` that path |
 
 The predicate is checked **in the conductor's own shell**, never read off a subagent's summary. This is what stops a lost or wrong contract from fabricating a downstream artifact.
@@ -94,7 +112,7 @@ The predicate is checked **in the conductor's own shell**, never read off a suba
 
 **Capture the dispatch timestamp first:** `T0=$(date +%s)`, plus the spec's own mtime (`stat -f %m <spec>` on macOS, `stat -c %Y` on Linux). Both are needed below.
 
-Dispatch an execute-and-report subagent (see "Step Subagents") with contract path `$RUN_DIR/step-1.contract.md`, that runs `Skill(spec-review-codex)` on the spec resolved in preflight — letting its full 3-iteration fix loop run — and writes the contract: `outcome` is `clean` / `finished-with-notes` / `failed` (a PASS maps to `clean`; an open-IMPORTANTs cap to `finished-with-notes`), `state` = the current (possibly rewritten) spec path.
+Dispatch an execute-and-report subagent (see "Step Subagents") with contract path `$RUN_DIR/step-1.contract.md`, that runs `Skill(claude-skills:spec-review-codex)` on the spec resolved in preflight — letting its full 3-iteration fix loop run — and writes the contract: `outcome` is `clean` / `finished-with-notes` / `failed` (a PASS maps to `clean`; an open-IMPORTANTs cap to `finished-with-notes`), `state` = the current (possibly rewritten) spec path.
 
 Then read the contract file and check the predicate yourself:
 
@@ -107,9 +125,9 @@ If the contract is missing but the review demonstrably ran, record `finished-wit
 
 ## Step 2: Write the Plan
 
-Dispatch an execute-and-report subagent with contract path `$RUN_DIR/step-2.contract.md`, that runs `Skill(writing-plans)` on the **hardened** spec from Step 1 and writes the plan path as `state`. This is the earliest generative step — do not re-brainstorm or re-interview. `writing-plans` writes to `docs/superpowers/plans/YYYY-MM-DD-<feature>.md`.
+Dispatch an execute-and-report subagent with contract path `$RUN_DIR/step-2.contract.md`, that runs `Skill(superpowers:writing-plans)` on the **hardened** spec from Step 1 and writes the plan path as `state`. This is the earliest generative step — do not re-brainstorm or re-interview. `writing-plans` writes to `docs/superpowers/plans/YYYY-MM-DD-<feature>.md`.
 
-Read the contract, then confirm the plan on disk yourself: `test -f <plan-path>`. If the contract is missing, recover the path from the predicate — the newest `docs/superpowers/plans/*.md` **whose mtime postdates this step's dispatch** — and record `finished-with-notes (contract lost — plan path recovered from disk)`. The mtime bound is what makes this recovery safe rather than a repeat of the stale-artifact bug: without it, a plan from an earlier feature is the newest match and the pipeline would go on to implement the wrong thing.
+Read the contract, then confirm the plan on disk yourself: `test -f <plan-path>`. If the contract is missing, recover the path from the predicate — the newest of `docs/superpowers/plans/*.md` **or** `docs/plans/*.md` (superpowers moved this location at 5.1.0 and `plan-to-dex` still honors the legacy one, so a machine on an older superpowers writes to a path the new-location-only glob never finds) **whose mtime postdates this step's dispatch** — and record `finished-with-notes (contract lost — plan path recovered from disk)`. The mtime bound is what makes this recovery safe rather than a repeat of the stale-artifact bug: without it, a plan from an earlier feature is the newest match and the pipeline would go on to implement the wrong thing.
 
 **No plan file on disk is a hard failure regardless of what the contract says.** A contract that reports a plan path which `test -f` cannot find is *not* the ordinary "predicate disagrees" case — trusting the predicate here means accepting that no plan exists, and Steps 3-6 are impossible without one. Skip to the final report. Never dispatch Step 4 with a plan path you have just proven absent.
 
@@ -123,35 +141,62 @@ Record the branch name.
 
 ## Step 4: Execute
 
-Dispatch an execute-and-report subagent (see "Step Subagents") with contract path `$RUN_DIR/step-4.contract.md`, that runs `Skill(plan-to-dex)` with the plan path from Step 2 — letting the dex `apply`/`review` loop run to completion, including its own final Opus review — and writes the contract: `state` = dex status + a one-line diff summary; `notes` = any failed dex tasks. This step emits the most output of any in the pipeline, so the dex logs staying in the subagent's context (not the conductor's) is the biggest isolation win. It is also the longest step, which is exactly why its contract must be written incrementally rather than composed at the end.
+Dispatch an execute-and-report subagent (see "Step Subagents") with contract path `$RUN_DIR/step-4.contract.md`, that runs `Skill(claude-skills:plan-to-dex)` with the plan path from Step 2 — letting the dex `apply`/`review` loop run to completion, including its own final Opus review — and writes the contract: `state` = dex status + a one-line diff summary; `notes` = any failed dex tasks. This step emits the most output of any in the pipeline, so the dex logs staying in the subagent's context (not the conductor's) is the biggest isolation win. It is also the longest step, which is exactly why its contract must be written incrementally rather than composed at the end.
 
 **`dex apply` is long-running** — it routinely exceeds the 10-minute foreground Bash ceiling. The subagent MUST run plan-to-dex's poll-to-completion loop (re-run `dex apply` foreground, max timeout, until all `.dex/plan.md` checkboxes are `[x]` or dex reports terminal) **inside its own invocation**. It MUST NOT background `dex apply` and return — a subagent's background processes are reaped on return, so the apply dies and only the dex setup commit lands. See the anti-yield guard in the subagent prompt below.
 
 **Capture `HEAD_0=$(git rev-parse HEAD)` before dispatching.** Step 3 may have *reused* an existing feature branch that already carries dex commits from an earlier run, so "are there dex commits in `git log`" cannot distinguish this step's work from a previous one's. The pre-dispatch SHA can.
 
-**Post-step zero-diff check:** after the subagent returns, the conductor checks the repo **in its own shell** — never from the subagent's `state` summary, and never skipped just because the contract file looks convincing — by running `git status --porcelain` and comparing `git rev-parse HEAD` against `HEAD_0`. If dex produced **zero diff** (clean tree *and* `HEAD` unmoved), there is nothing to commit → skip Steps 5-6 and jump to the final report. Do not open an empty PR. Verifying against git directly is what stops a mis-summary, or a *lost* summary, from fabricating a PR.
+**Post-step zero-diff check:** after the subagent returns, the conductor checks the repo **in its own shell** — never from the subagent's `state` summary, and never skipped just because the contract file looks convincing.
+
+**The predicate must measure *implementation*, not activity.** A naive "clean tree *and* `HEAD` unmoved" test can never fire, so it would wave a scaffolding-only run straight through to an empty PR: the tree is *already* dirty before dispatch (Step 1's spec rewrite and Step 2's plan file are both uncommitted), and `dex import --force` always produces its setup commit, so `HEAD` always moves — even when `dex apply` implements nothing. Exclude the pipeline's own by-products from both halves:
+
+```bash
+git log --oneline "$HEAD_0"..HEAD -- . ':(exclude)tasks/dex-plan.md' ':(exclude).dex/' ':(exclude)docs/superpowers/'
+git status --porcelain --                . ':(exclude)tasks/dex-plan.md' ':(exclude).dex/' ':(exclude)docs/superpowers/'
+```
+
+If **both** print nothing, dex produced zero implementation → skip Steps 5-6 and jump to the final report, recording `failed (dex produced no implementation — only the dex import setup commit)`. Do not open an empty PR. (`git log` with an exclude pathspec drops commits that touch *only* the excluded paths, which is exactly the `dex import` commit.) Verifying against git directly is what stops a mis-summary, or a *lost* summary, from fabricating a PR.
 
 This check is the template the other steps' predicates follow: git is the authority, the contract is the narrative.
 
 ## Step 5: Open the PR
 
-Run the `/commit-commands:commit-push-pr` slash command to commit, push the branch, and open the PR. Capture the PR number and URL from its output. If no PR is created (hard failure), skip Step 6 and jump to the final report.
+**First, quarantine the pipeline's by-products.** `/commit-commands:commit-push-pr` commits **everything dirty** with no path scoping (its tool allowlist is `git …` + `gh pr create` and nothing else), so dex's scratch state would land in the feature PR. Move the untracked ones into the run dir — regenerable from the plan, and still inspectable afterwards:
+
+```bash
+mkdir -p "$RUN_DIR/artifacts"
+for p in tasks/dex-plan.md .dex; do
+  if [ -e "$p" ] && ! git ls-files --error-unmatch "$p" >/dev/null 2>&1 && ! git check-ignore -q "$p"; then
+    mv "$p" "$RUN_DIR/artifacts/"
+  fi
+done
+```
+
+Only *untracked and unignored* paths move: a repo that tracks or already ignores them has made its own decision, and the conductor does not overrule it. The hardened spec and the plan file **stay** — they are real documentation of the change and belong in the PR.
+
+Then run the `/commit-commands:commit-push-pr` slash command to commit, push the branch, and open the PR. Capture the PR number and URL from its output.
+
+If no PR is created, that is a hard failure for Step 6 only → record it and skip to Step 7 (which reviews the branch, not the PR). When the failure is a permissions/auth error (`must be a collaborator`, `403`), record it as `failed (gh account lacks write access on this repo)` rather than a generic failure, so the final report points at machine state instead of at the pipeline.
 
 ## Step 6: Review Loop
 
 The built-in `/code-review` **cannot** be invoked from an autonomous run (it is flagged `disable-model-invocation`). Instead, each pass dispatches one **review-and-fix subagent** (see "Step Subagents") that runs the whole `/review-pr` panel against the PR, then applies **only** the CRITICAL and IMPORTANT findings to the working tree (leaving ADVISORY/MINOR). The subagent does **not** commit; the conductor owns the commit/push loop so the fixes land as real branch commits.
 
 Loop, up to **3 passes**:
-1. Dispatch the review-and-fix subagent with contract path `$RUN_DIR/step-6.pass-<N>.contract.md` (a fresh path per pass — never overwrite a previous pass's contract, and never glob for "the latest one"), giving it the PR number/URL from Step 5. The explicit PR target matters: after Step 5's push, the branch's default review range (`@{upstream}...HEAD`) is empty, so `/review-pr` reviews the PR's full diff vs its base, not that empty range.
-2. **Decide whether fixes were applied from `git status --porcelain`, not from the contract.** A non-empty working tree means this pass applied fixes; an empty one means it did not. This predicate is authoritative and works even when the pass's contract is missing — it is what actually drove the loop in the run that lost all five contracts.
-3. If **no fixes were applied** → exit the loop (an unchanged tree only re-yields the same result — leftover ADVISORY/MINOR or deliberately-skipped findings alone are terminal, not a reason to re-review).
-4. Otherwise the conductor commits and pushes the applied fixes, then re-dispatches (next pass). Findings the subagent **left** (ADVISORY/MINOR, or a CRITICAL/IMPORTANT it judged false-positive or out of diff scope) are read from the pass contract and recorded, not re-litigated.
+1. **Compute the review scope yourself and pass it in.** `git diff --name-only <base>...HEAD` (base = the PR's base branch) — hold both the file list and its count as `SCOPE_N`. Then dispatch the review-and-fix subagent with contract path `$RUN_DIR/step-6.pass-<N>.contract.md` (a fresh path per pass — never overwrite a previous pass's contract, and never glob for "the latest one"), giving it the PR number/URL from Step 5 **and that explicit file list**.
+
+   Both halves matter. `/review-pr`'s own command file scopes itself from the working tree (`git diff --name-only`, "agents analyze git diff by default") — which is **empty** after Step 5 commits and pushes. So the default behaviour of the command the pipeline depends on is to review nothing, report clean, and terminate this loop as a success. Prose telling the subagent to "review the PR's full diff versus its base" is a fix that rests entirely on instruction-following beating a written default; handing it the concrete file list plus a count the conductor can check is a fix that does not.
+2. **Decide whether fixes were applied by diffing the working tree against a snapshot taken before dispatch, not from the contract.** Capture `SNAP_N=$(git status --porcelain)` *immediately before* dispatching the pass; after it returns, this pass applied fixes iff `git status --porcelain` differs from `SNAP_N`. Do **not** test for a merely non-empty tree: any leftover untracked file — a stray artifact, an editor temp file, a by-product Step 5 did not quarantine — satisfies non-emptiness on *every* pass, which drives useless commit-and-re-dispatch cycles straight to the 3-pass cap and reports fixes that never happened. The snapshot diff is authoritative and works even when the pass's contract is missing.
+3. **Validate the pass's scope before believing a clean result.** The contract's `state` must report how many files the panel actually reviewed. If it reports **0** (or the count is absent) while `SCOPE_N` was non-zero, this pass reviewed nothing: record it as `failed (empty review scope — panel reviewed 0 of <SCOPE_N> changed files)` and **do not read it as clean**. Re-dispatch once with the file list restated; if it happens again, stop the loop and say so in the final report. A clean verdict over an empty scope is indistinguishable from a genuine clean one unless the scope is checked — and it is the more likely of the two.
+4. If **no fixes were applied** (and the scope checked out) → exit the loop (an unchanged tree only re-yields the same result — leftover ADVISORY/MINOR or deliberately-skipped findings alone are terminal, not a reason to re-review).
+5. Otherwise the conductor commits and pushes the applied fixes, then re-dispatches (next pass). Findings the subagent **left** (ADVISORY/MINOR, or a CRITICAL/IMPORTANT it judged false-positive or out of diff scope) are read from the pass contract and recorded, not re-litigated.
 
 After 3 passes, stop even if findings remain. Each pass's contract file carries that pass's leftover findings (file:line — summary, with severity) for the final report — no separate boundary verifier runs. If a pass's contract is missing, record `pass <N>: fixes applied (contract lost — findings not summarized)` and, when the cap is hit this way, note in the final report that the last commit's changes were never summarized by the panel — a follow-up `/review-pr` scoped to that commit is the remedy.
 
 ## Step 7: Architect Review
 
-Run `Skill(architect-review-pr)` against the branch — the completeness & wiring pass ("is this actually done and integrated?") that complements Step 6's line-level review. **Invoke it with `report-path=$RUN_DIR/architect-review.md`** — its documented token for a caller-supplied report path, which it uses instead of minting its own. Pass no scope argument: it scopes findings to the branch diff vs base on its own. It runs in the main loop (it already dispatches its own fresh-context subagent — see Step Isolation) and it is **report-only**: the conductor reads that exact path and records its ranked findings (Unwired / Missing / Incomplete / Bug-edge / Risk) verbatim enough to act on, fixes nothing, and continues to the final report (never halt on quality).
+Run `Skill(claude-skills:architect-review-pr)` against the branch — the completeness & wiring pass ("is this actually done and integrated?") that complements Step 6's line-level review. **Invoke it with `report-path=$RUN_DIR/architect-review.md`** — its documented token for a caller-supplied report path, which it uses instead of minting its own. Pass no scope argument: it scopes findings to the branch diff vs base on its own. It runs in the main loop (it already dispatches its own fresh-context subagent — see Step Isolation) and it is **report-only**: the conductor reads that exact path and records its ranked findings (Unwired / Missing / Incomplete / Bug-edge / Risk) verbatim enough to act on, fixes nothing, and continues to the final report (never halt on quality).
 
 **Read only `$RUN_DIR/architect-review.md`.** Never glob `architect-review-pr-*.md` in the temp dir — a report from a previous session on a *different* ticket satisfies that pattern, and presenting stale findings as this run's is a worse outcome than reporting none. If the file does not exist, record Step 7 as `failed (no architect report produced)` and say so in the final report.
 
@@ -175,13 +220,21 @@ Every subagent — the three execute-and-report subagents (Steps 1/2/4) and the 
 - **Step 1 — spec review:** `state` = current (possibly rewritten) spec path; `notes` = open IMPORTANTs if the loop hit its cap.
 - **Step 2 — plan:** `state` = plan path.
 - **Step 4 — execution:** `state` = dex status + one-line diff summary; `notes` = any failed dex tasks.
-- **Step 6 — PR review:** `state` = PR URL; `notes` = the CRITICAL/IMPORTANT findings applied this pass, plus leftover findings (ADVISORY/MINOR or a CRITICAL/IMPORTANT left unfixed) — each as `file:line — summary [severity]`. Whether fixes were applied is decided from `git status --porcelain`, not from this field.
+- **Step 6 — PR review:** `state` = PR URL + `reviewed: <N> of <SCOPE_N> files` (the scope evidence — see Step 6); `notes` = the CRITICAL/IMPORTANT findings applied this pass, plus leftover findings (ADVISORY/MINOR or a CRITICAL/IMPORTANT left unfixed) — each as `file:line — summary [severity]`. Whether fixes were applied is decided from the working-tree snapshot diff, not from this field.
 
 ### Execute-and-report subagent prompt (Steps 1/2/4)
 
-The subagent runs the step AND writes the contract — the raw output stays in *its* context:
+The subagent runs the step AND writes the contract — the raw output stays in *its* context.
+
+> ⚠️ **Co-edit warning — the only deliberate duplication in this skill.** The FORBIDDEN list and the pre-return verification block below are duplicated **verbatim** from `skills/plan-to-dex/SKILL.md` (a conductor that duplicates none of its units' logic still has to carry the anti-yield guard, because the guard binds *this* subagent, not the skill it invokes). The same text also appears in `docs/skills/plan-to-dex.md`. Touch any of the three and you must touch all three: `grep -rn '\[d\]ex --cli codex' skills/ docs/` finds every site — update them in one commit or they drift silently.
 
 > You are executing one step of an autonomous pipeline. Invoke `Skill(<step-skill>)` with these inputs: <inputs>. Let it run to completion. **You MUST NOT return until the step reaches a terminal state.** If the step launches a long-running process (e.g. `dex apply` or `dex review`, or a spec-review codex pass), poll it to completion **in THIS invocation** — returning reaps any backgrounded work and silently discards the result.
+>
+> **AUTONOMOUS — NO USER IS REACHABLE. The skills you invoke were written for interactive use and WILL try to ask you questions. Every one of them is pre-approved.**
+> - Treat every confirmation gate in the invoked skill as an answered **yes** and proceed. Never ask, never wait for input, never stop to present a choice. (`plan-to-dex` Step 5 presents `Proceed? [y/N]` — the answer is yes; its plan-validation "ask whether to proceed" and its quality-gate "What commands must pass?" are answered from the repo's own tooling, and its branch guard uses the branch the conductor already resolved.)
+> - **`writing-plans` (Step 2): STOP the moment the plan file is written.** Its final "Execution Handoff" section asks **"Which approach?"** and attaches a REQUIRED SUB-SKILL (`subagent-driven-development` / `executing-plans`) to each answer. Do **not** pick one, do **not** invoke either sub-skill, do **not** begin implementing the plan — Step 4 of this pipeline executes it via dex, and implementing here duplicates that work on the same branch. Writing the plan file is your entire job.
+> - **`spec-review-codex` (Step 1): on its 120s codex timeout, retry once.** Its skill says to ask the user whether to retry or skip — you cannot. Retry once; if it times out again, record `failed` with the timeout in `notes` and finalize the contract.
+> - If you ever find yourself with a question and no way to ask it, answer it from the repo and record the assumption in `notes`. A stalled subagent delivers nothing.
 >
 > **Your contract file is `<CONTRACT_PATH>`. This is how you report — not your final message.** Create it with the `Write` tool **now, before you start the step**, containing `outcome: running` and the inputs you were given. Update it as the step progresses: set `state` the moment the artifact exists, append each `notes` entry as you confirm it, and set the final `outcome` when the step is terminal. Subagents in this pipeline have repeatedly finished their work and then ended without delivering a final message; nobody can ask you for the contract afterwards, and a re-ask has never recovered one. The file is the only channel that survives. Keep it current as you go, not composed at the end.
 >
@@ -209,11 +262,11 @@ Dispatch a `general-purpose` subagent once per pass. It runs the whole `/review-
 >
 > **Your contract file is `<CONTRACT_PATH>`. This is how you report — not your final message.** Create it with the `Write` tool before you begin, and append each finding to it **as you triage it** — the finding, its severity, and whether you applied a fix or left it and why. Do not accumulate the findings list in your head to write at the end: subagents in this pipeline have finished their work and then ended without delivering a final message, and a re-ask has never recovered one. Findings exist nowhere but this file — the conductor can re-derive from git that fixes landed, but never *which* findings they answered.
 >
-> Run the `/review-pr` slash command (`pr-review-toolkit:review-pr`) against PR <PR# / URL> and let its full specialized-agent panel complete. Review the PR's full diff versus its base branch, not the empty `@{upstream}...HEAD` range. (`/review-pr` launches its analyzers via the `Task` tool; if this environment does not let you, as a subagent, spawn your own subagents, then perform each of `/review-pr`'s review aspects yourself, inline in this context — do not skip the review.)
+> Run the `/review-pr` slash command (`pr-review-toolkit:review-pr`) against PR <PR# / URL> and let its full specialized-agent panel complete. **Review exactly these <SCOPE_N> changed files — this list is your scope, and it is authoritative:** <file list>. Do **not** let the review scope itself from the working tree: `/review-pr` defaults to `git diff --name-only`, which is empty on this branch because the changes are already committed and pushed, and a review of an empty scope reports "clean" while having examined nothing. If the panel comes back having looked at 0 files, that is a failed pass — say so rather than reporting clean. (`/review-pr` launches its analyzers via the `Task` tool; if this environment does not let you, as a subagent, spawn your own subagents, then perform each of `/review-pr`'s review aspects yourself, inline in this context — do not skip the review.)
 >
 > Then fix the reported findings: apply a fix to the working tree for **every CRITICAL and IMPORTANT** finding, leaving ADVISORY/MINOR untouched. Skip a CRITICAL/IMPORTANT only if you judge it a false positive or outside the PR diff — and record why. Stay in scope: no behavior changes beyond each fix, nothing outside the PR diff. **Do NOT commit or push** — the conductor commits your applied fixes.
 >
-> Then finalize `<CONTRACT_PATH>` so it holds exactly the three fields — `outcome` (`clean` if the panel found no CRITICAL/IMPORTANT | `finished-with-notes` if you applied fixes or left findings | `failed`), `state` (the PR URL), `notes`: each finding you **applied** and each you **left**, as `file:line — summary [severity]` (empty only if the panel found nothing) — and return the same three fields as your final message (corroboration; the file is what the conductor reads). Do not paste the raw review trace or diffs into either — only the contract.
+> Then finalize `<CONTRACT_PATH>` so it holds exactly the three fields — `outcome` (`clean` if the panel found no CRITICAL/IMPORTANT | `finished-with-notes` if you applied fixes or left findings | `failed`), `state` (the PR URL **plus `reviewed: <N> of <SCOPE_N> files` — the count the panel actually examined; the conductor treats a missing or zero count as a failed pass, so never omit it and never round it up**), `notes`: each finding you **applied** and each you **left**, as `file:line — summary [severity]` (empty only if the panel found nothing) — and return the same three fields as your final message (corroboration; the file is what the conductor reads). Do not paste the raw review trace or diffs into either — only the contract.
 
 Keep every subagent prompt scoped to one step so the conductor's own context stays lean.
 

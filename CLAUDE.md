@@ -52,4 +52,4 @@ Repo-wide rules that apply to any task. Per-skill conventions live in each skill
 - `${CLAUDE_PLUGIN_ROOT}` resolves to the plugin install path at runtime — always use this in script references shown to users
 - Shell scripts use `set -euo pipefail` and require `jq` for JSON parsing
 - Hooks live in `hooks/hooks.json` at the plugin root — the plugin system does not discover hooks nested inside skill directories
-- Bump BOTH `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` versions together when adding or changing a skill
+- **Patch bumps are automatic — do not hand-bump for an ordinary change.** `.github/workflows/bump-version.yml` patch-bumps BOTH `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` on any push to `main` touching `skills/**`, `hooks/**`, or `.claude-plugin/**`, unless that push already changed the version (its `[skip ci]` commit is the loop guard). Bump by hand only for an intentional **minor/major** — and then bump both files together, which also suppresses the bot for that push. A PR with no version change is correct, not an oversight
