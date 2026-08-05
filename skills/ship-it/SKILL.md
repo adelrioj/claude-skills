@@ -60,9 +60,12 @@ Run these checks **before any mutation**. Preflight failure is the **only** hard
        | jq -se --arg c "$c" 'any(.[]; (.clis // {}) | has($c))' >/dev/null \
        || echo "MISSING dex cli entry: $c"
    done
+   echo "codex tiers → spec-review: ${CODEX_EFFORT_REVIEW:-xhigh} | dex apply: ${DEX_CLI_BUILD:-codex} | dex review: ${DEX_CLI_REVIEW:-codex-xhigh}"
    ```
 
-   Any output → STOP naming the variable and its bad value. With nothing set this prints nothing, so the check costs a user who never opted in exactly one silent command. Do **not** check for `codex-xhigh` here — `plan-to-dex` provisions it in its own Step 4, which runs later and would make an up-front check spuriously fail on a first run.
+   Any `BAD`/`MISSING` line → STOP naming the variable and its bad value. With nothing set the validation prints nothing, so the check costs a user who never opted in exactly one silent command. Do **not** check for `codex-xhigh` here — `plan-to-dex` provisions it in its own Step 4, which runs later and would make an up-front check spuriously fail on a first run.
+
+   **The `echo` is not decoration.** It is the only place the resolved tiers ever become visible: `plan-to-dex` prints its own `Backend: apply → …, review → …` line, but it runs as a Step 4 **subagent** whose entire output is compressed to a three-field contract, so that line never reaches the user. Type the `${…:-…}` fragments literally and let the shell resolve them — never substitute a tier you assumed. Echo the line verbatim into the preflight summary and carry it into the Final Report.
 
 4. **Required plugins installed:** `pr-review-toolkit` (Step 6's `/review-pr`), `commit-commands` (Step 5's PR), and `superpowers` (Step 2's `writing-plans`). Check the **install registry**, not the filesystem:
 
@@ -323,6 +326,7 @@ Because nothing stops mid-run to flag problems, the final report is the contract
 
 - **Per-step outcome** for all 7 steps: `clean` / `finished-with-notes` / `skipped (reason)` / `failed (reason)`.
 - **Hand-off integrity:** any step whose contract file was missing or disagreed with its predicate, named explicitly (`step 4: contract lost — state reconstructed from git`). A run that lost contracts is not a clean run, and the reader must be able to tell which summaries are missing rather than assuming those steps had nothing to say. Cite `$RUN_DIR` so the surviving contracts can be inspected.
+- **Codex tiers used:** the preflight line verbatim (`spec-review: … | dex apply: … | dex review: …`). Both backends fail open on a bad tier, and no step reports the tier it actually ran at, so this line is the only record of whether an hour of pipeline ran deep or cheap.
 - **PR:** number + URL, or an explicit note that no PR was opened and why.
 - **Unresolved findings:** every leftover CRITICAL/IMPORTANT from spec-review, every unfixed/skipped PR-review finding, **and** the architect review's ranked findings, verbatim enough to act on.
 - **Failed dex tasks:** any task the dex loop could not complete.
