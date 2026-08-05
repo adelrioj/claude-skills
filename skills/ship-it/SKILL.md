@@ -60,12 +60,16 @@ Run these checks **before any mutation**. Preflight failure is the **only** hard
        | jq -se --arg c "$c" 'any(.[]; (.clis // {}) | has($c))' >/dev/null \
        || echo "MISSING dex cli entry: $c"
    done
-   echo "codex tiers → spec-review: ${CODEX_EFFORT_REVIEW:-xhigh} | dex apply: ${DEX_CLI_BUILD:-codex} | dex review: ${DEX_CLI_REVIEW:-codex-xhigh}"
+   APPLY="${DEX_CLI_BUILD:-codex${CODEX_EFFORT_BUILD:+-$CODEX_EFFORT_BUILD}}"
+   [ "$APPLY" = codex ] && APPLY="codex$(sed -n 's/^model_reasoning_effort *= *"\(.*\)"/ (inherits \1)/p' ~/.codex/config.toml | head -1)"
+   echo "codex tiers → spec-review: ${CODEX_EFFORT_REVIEW:-xhigh} | dex apply: $APPLY | dex review: ${DEX_CLI_REVIEW:-codex-${CODEX_EFFORT_REVIEW:-xhigh}}"
    ```
 
-   Any `BAD`/`MISSING` line → STOP naming the variable and its bad value. With nothing set the validation prints nothing, so the check costs a user who never opted in exactly one silent command. Do **not** check for `codex-xhigh` here — `plan-to-dex` provisions it in its own Step 4, which runs later and would make an up-front check spuriously fail on a first run.
+   Any `BAD`/`MISSING` line → STOP naming the variable and its bad value. With nothing set the validation prints nothing, so the check costs a user who never opted in exactly one silent command. Do **not** check for `codex-xhigh` or any `codex-<effort>` entry here — `plan-to-dex` provisions those in its own Step 4, which runs later and would make an up-front check spuriously fail on a first run. The `DEX_CLI_*` loop checks only entries the user *named themselves*, which `plan-to-dex` deliberately never auto-creates.
 
    **The `echo` is not decoration.** It is the only place the resolved tiers ever become visible: `plan-to-dex` prints its own `Backend: apply → …, review → …` line, but it runs as a Step 4 **subagent** whose entire output is compressed to a three-field contract, so that line never reaches the user. Type the `${…:-…}` fragments literally and let the shell resolve them — never substitute a tier you assumed. Echo the line verbatim into the preflight summary and carry it into the Final Report.
+
+   **The `inherits` lookup exists because the build tier is the one thing the fragment cannot state.** `dex apply` defaults to the stock `codex` entry, whose effort comes from `~/.codex/config.toml` — so the same pipeline builds at `low` on one machine and `xhigh` on another, and printing the entry *name* alone would hide that completely. Reading the config makes the tier explicit without pinning it (pinning build is deliberately not this pipeline's call — `docs/codex-tuning.md`). No output when the key is absent: codex's own default applies, and inventing a number here would be a guess.
 
 4. **Required plugins installed:** `pr-review-toolkit` (Step 6's `/review-pr`), `commit-commands` (Step 5's PR), and `superpowers` (Step 2's `writing-plans`). Check the **install registry**, not the filesystem:
 
