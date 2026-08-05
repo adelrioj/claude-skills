@@ -48,7 +48,23 @@ Run these checks **before any mutation**. Preflight failure is the **only** hard
 
 1. **`codex` on PATH:** `command -v codex` — else STOP: "codex CLI not found; required by spec-review-codex and plan-to-dex."
 2. **`dex` on PATH:** `command -v dex` — else STOP: "dex not found. Install: `curl -sSfL https://raw.githubusercontent.com/francescoalemanno/dex/main/install.sh | bash`."
-3. **Required plugins installed:** `pr-review-toolkit` (Step 6's `/review-pr`), `commit-commands` (Step 5's PR), and `superpowers` (Step 2's `writing-plans`). Check the **install registry**, not the filesystem:
+3. **Codex tuning overrides resolve — only if the user set any.** The pipeline's review passes run at `xhigh` by default with no setup (`docs/codex-tuning.md`); the four override variables are the only thing that can be wrong here, and both backends **fail open** — `codex exec -c model_reasoning_effort=garbage` and dex's `unknown CLI "<name>"` (which still exits 0) each sail past unnoticed from inside a subagent, running the whole pipeline at the wrong tier. Validate only what the user actually set:
+
+   ```bash
+   for e in "${CODEX_EFFORT_BUILD:-}" "${CODEX_EFFORT_REVIEW:-}"; do
+     case "$e" in ''|low|medium|high|xhigh) ;; *) echo "BAD codex effort: $e" ;; esac
+   done
+   for c in "${DEX_CLI_BUILD:-}" "${DEX_CLI_REVIEW:-}"; do
+     [ -z "$c" ] && continue
+     cat "${XDG_CONFIG_HOME:-$HOME/.config}/dex/config.json" .dex/config.json 2>/dev/null \
+       | jq -se --arg c "$c" 'any(.[]; (.clis // {}) | has($c))' >/dev/null \
+       || echo "MISSING dex cli entry: $c"
+   done
+   ```
+
+   Any output → STOP naming the variable and its bad value. With nothing set this prints nothing, so the check costs a user who never opted in exactly one silent command. Do **not** check for `codex-xhigh` here — `plan-to-dex` provisions it in its own Step 4, which runs later and would make an up-front check spuriously fail on a first run.
+
+4. **Required plugins installed:** `pr-review-toolkit` (Step 6's `/review-pr`), `commit-commands` (Step 5's PR), and `superpowers` (Step 2's `writing-plans`). Check the **install registry**, not the filesystem:
 
    ```bash
    for p in pr-review-toolkit commit-commands superpowers; do
@@ -60,7 +76,7 @@ Run these checks **before any mutation**. Preflight failure is the **only** hard
    Any `MISSING` line → STOP naming the plugin and what it is needed for. **Do not check with `find ~/.claude/plugins -path '*commands/<cmd>.md'`** — that matches copies inside the `marketplaces/` clones and stale `cache/` versions, so it passes for *any* plugin the marketplace carries whether installed or not, converting a fast preflight abort into a late Step 2/5/6 failure. `installed_plugins.json` (keys are `<name>@<marketplace>`) is the ground truth. If that file does not exist (older Claude Code), fall back to the `find` check and note the weaker signal.
 
    A pre-check is used at all because a slash command's or skill's resolvability cannot be tested without invoking it, and the early abort avoids running the whole pipeline only to fail at the step that needs it. `superpowers` is easy to forget here — `writing-plans` is the one unit that is not part of this plugin, so its absence otherwise surfaces only after a full codex spec-review has already been spent.
-4. **Spec located:** the argument is a path to a design spec; if omitted, find the newest `docs/superpowers/specs/*-design.md` and confirm it with the user before starting. If no file matches that glob, STOP and ask the user to provide the spec path explicitly.
+5. **Spec located:** the argument is a path to a design spec; if omitted, find the newest `docs/superpowers/specs/*-design.md` and confirm it with the user before starting. If no file matches that glob, STOP and ask the user to provide the spec path explicitly.
 
 On any STOP, print the missing item plus its remedy and exit without touching the repo.
 

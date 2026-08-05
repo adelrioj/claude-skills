@@ -54,7 +54,7 @@ REVIEW_PROMPT="${PLUGIN_ROOT}/skills/spec-review-codex/spec-review-prompt.md"
 SPEC_FILE="<path-to-spec>"
 FINDINGS_FILE="/tmp/spec-review-findings-$(date +%s).md"
 
-codex exec --sandbox read-only --output-last-message "$FINDINGS_FILE" "$(cat "$REVIEW_PROMPT")
+codex exec -c model_reasoning_effort="${CODEX_EFFORT_REVIEW:-xhigh}" --sandbox read-only --output-last-message "$FINDINGS_FILE" "$(cat "$REVIEW_PROMPT")
 
 ---
 
@@ -74,6 +74,8 @@ $(cat "$SPEC_FILE")
 ```
 
 Run this via Bash. Codex's final message (the findings) lands in `$FINDINGS_FILE` via `--output-last-message`.
+
+**Reasoning effort is pinned by this skill, not inherited.** Adversarial review is the slot where depth pays for itself, so the command hardcodes `xhigh` and requires no setup from the user — a machine whose `~/.codex/config.toml` says `medium` still gets a real review. `$CODEX_EFFORT_REVIEW` is the escape hatch for anyone who wants otherwise. Type the `${CODEX_EFFORT_REVIEW:-xhigh}` fragment literally; do not resolve it or substitute an effort of your own. See `docs/codex-tuning.md`.
 
 **Timeout:** 120 seconds. If Codex times out, report the timeout to the user and ask whether to retry or skip.
 

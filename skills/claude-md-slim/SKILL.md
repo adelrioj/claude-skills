@@ -89,7 +89,7 @@ pointer costs one on-demand read; a kept paragraph costs every session forever.
    - Write each `docs/<topic>.md` with the extracted blocks verbatim (move, don't
      rewrite — preserve the exact wording so nothing is lost).
    - Rewrite root `CLAUDE.md`: the STAYS blocks, plus a short **plain-path pointer
-     index** — e.g. `- Swarm-execute internals & conventions: see docs/swarm-execute.md`.
+     index** — e.g. `- Auth internals & conventions: see docs/auth.md`.
      Plain paths only; never `@docs/...`.
    - Leave everything **uncommitted** — the maintainer owns git.
 
