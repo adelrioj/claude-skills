@@ -48,7 +48,36 @@ Run these checks **before any mutation**. Preflight failure is the **only** hard
 
 1. **`codex` on PATH:** `command -v codex` — else STOP: "codex CLI not found; required by spec-review-codex and plan-to-dex."
 2. **`dex` on PATH:** `command -v dex` — else STOP: "dex not found. Install: `curl -sSfL https://raw.githubusercontent.com/francescoalemanno/dex/main/install.sh | bash`."
-3. **Required plugins installed:** `pr-review-toolkit` (Step 6's `/review-pr`), `commit-commands` (Step 5's PR), and `superpowers` (Step 2's `writing-plans`). Check the **install registry**, not the filesystem:
+3. **Codex model + effort resolve to something this account can actually run.** The pipeline pins both per slot with no setup — **`gpt-5.6-luna` at `high` for implementation, `gpt-5.6-sol` at `high` for adversarial review** (`docs/codex-tuning.md`). Everything here **fails open**, which is why this check exists at all: `codex exec -m nope` and `-c model_reasoning_effort=garbage` are both accepted without complaint until the run is underway, and dex's `unknown CLI "<name>"` **still exits 0**. From inside a Step 4 subagent none of that is visible, so the whole pipeline runs on the wrong model — or silently on the machine's own default — for an hour.
+
+   ```bash
+   MC="$HOME/.codex/models_cache.json"
+   for slot in "${CODEX_MODEL_BUILD:-gpt-5.6-luna}:${CODEX_EFFORT_BUILD:-high}" \
+               "${CODEX_MODEL_REVIEW:-gpt-5.6-sol}:${CODEX_EFFORT_REVIEW:-high}"; do
+     m="${slot%:*}"; e="${slot#*:}"
+     case "$e" in low|medium|high|xhigh|max|ultra) ;; *) echo "BAD codex effort: $e" ;; esac
+     [ -s "$MC" ] || continue
+     jq -e --arg m "$m" --arg e "$e" \
+       '.models[] | select(.slug==$m) | [.supported_reasoning_levels[].effort] | index($e)' "$MC" >/dev/null 2>&1 \
+       || echo "UNAVAILABLE: '$m' at effort '$e' — entitled: $(jq -r '[.models[].slug] | join(", ")' "$MC")"
+   done
+   for c in "${DEX_CLI_BUILD:-}" "${DEX_CLI_REVIEW:-}"; do
+     [ -z "$c" ] && continue
+     cat "${XDG_CONFIG_HOME:-$HOME/.config}/dex/config.json" .dex/config.json 2>/dev/null \
+       | jq -se --arg c "$c" 'any(.[]; (.clis // {}) | has($c))' >/dev/null \
+       || echo "MISSING dex cli entry: $c"
+   done
+   echo "codex → build: ${CODEX_MODEL_BUILD:-gpt-5.6-luna} @ ${CODEX_EFFORT_BUILD:-high} | review: ${CODEX_MODEL_REVIEW:-gpt-5.6-sol} @ ${CODEX_EFFORT_REVIEW:-high}"
+   echo "dex    → apply: ${DEX_CLI_BUILD:-codex-${CODEX_MODEL_BUILD:-gpt-5.6-luna}-${CODEX_EFFORT_BUILD:-high}} | review: ${DEX_CLI_REVIEW:-codex-${CODEX_MODEL_REVIEW:-gpt-5.6-sol}-${CODEX_EFFORT_REVIEW:-high}}"
+   ```
+
+   Any `BAD` / `UNAVAILABLE` / `MISSING` line → STOP naming the variable and its bad value. Do **not** check for the `codex-<model>-<effort>` dex entries here — `plan-to-dex` provisions those in its own Step 4, which runs later and would make an up-front check spuriously fail on a first run. The `DEX_CLI_*` loop checks only entries the user *named themselves*, which `plan-to-dex` deliberately never auto-creates.
+
+   **The entitlement check is the price of pinning a model.** A pinned slug is the one setting that can be wrong on a machine that never opted in — accounts differ, and slugs age out. `~/.codex/models_cache.json` is codex's own list, so it validates the *pair*: `gpt-5.6-luna` at `ultra` fails even though both words are individually fine, because luna caps at `max`. It is skipped when that file is absent — it is a cache, and treating a cold one as "unentitled" would block a machine whose model is fine.
+
+   **The two `echo`s are not decoration.** They are the only place the resolved model+effort ever become visible: `plan-to-dex` prints its own `Backend:` line, but it runs as a Step 4 **subagent** whose entire output is compressed to a three-field contract, so that line never reaches the user. Type the `${…:-…}` fragments literally and let the shell resolve them — never substitute a model or tier you assumed. Echo both lines verbatim into the preflight summary and carry them into the Final Report.
+
+4. **Required plugins installed:** `pr-review-toolkit` (Step 6's `/review-pr`), `commit-commands` (Step 5's PR), and `superpowers` (Step 2's `writing-plans`). Check the **install registry**, not the filesystem:
 
    ```bash
    for p in pr-review-toolkit commit-commands superpowers; do
@@ -60,7 +89,7 @@ Run these checks **before any mutation**. Preflight failure is the **only** hard
    Any `MISSING` line → STOP naming the plugin and what it is needed for. **Do not check with `find ~/.claude/plugins -path '*commands/<cmd>.md'`** — that matches copies inside the `marketplaces/` clones and stale `cache/` versions, so it passes for *any* plugin the marketplace carries whether installed or not, converting a fast preflight abort into a late Step 2/5/6 failure. `installed_plugins.json` (keys are `<name>@<marketplace>`) is the ground truth. If that file does not exist (older Claude Code), fall back to the `find` check and note the weaker signal.
 
    A pre-check is used at all because a slash command's or skill's resolvability cannot be tested without invoking it, and the early abort avoids running the whole pipeline only to fail at the step that needs it. `superpowers` is easy to forget here — `writing-plans` is the one unit that is not part of this plugin, so its absence otherwise surfaces only after a full codex spec-review has already been spent.
-4. **Spec located:** the argument is a path to a design spec; if omitted, find the newest `docs/superpowers/specs/*-design.md` and confirm it with the user before starting. If no file matches that glob, STOP and ask the user to provide the spec path explicitly.
+5. **Spec located:** the argument is a path to a design spec; if omitted, find the newest `docs/superpowers/specs/*-design.md` and confirm it with the user before starting. If no file matches that glob, STOP and ask the user to provide the spec path explicitly.
 
 On any STOP, print the missing item plus its remedy and exit without touching the repo.
 
@@ -307,6 +336,7 @@ Because nothing stops mid-run to flag problems, the final report is the contract
 
 - **Per-step outcome** for all 7 steps: `clean` / `finished-with-notes` / `skipped (reason)` / `failed (reason)`.
 - **Hand-off integrity:** any step whose contract file was missing or disagreed with its predicate, named explicitly (`step 4: contract lost — state reconstructed from git`). A run that lost contracts is not a clean run, and the reader must be able to tell which summaries are missing rather than assuming those steps had nothing to say. Cite `$RUN_DIR` so the surviving contracts can be inspected.
+- **Codex model + effort used:** the two preflight lines verbatim (`codex → build: … | review: …` and `dex → apply: … | review: …`). Everything fails open on a bad model or tier, and no step reports what it actually ran on, so these lines are the only record of whether an hour of pipeline ran on the frontier model or the cheap one.
 - **PR:** number + URL, or an explicit note that no PR was opened and why.
 - **Unresolved findings:** every leftover CRITICAL/IMPORTANT from spec-review, every unfixed/skipped PR-review finding, **and** the architect review's ranked findings, verbatim enough to act on.
 - **Failed dex tasks:** any task the dex loop could not complete.

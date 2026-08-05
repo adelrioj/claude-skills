@@ -10,7 +10,7 @@ Translate a Superpowers implementation plan into a [dex](https://github.com/fran
 
 The plan is the **source of truth**. Do NOT re-interview the user, regenerate requirements, or let dex re-plan via `dex plan`.
 
-**Backend is fixed to codex** (`--cli codex`): the skill never asks which backend, never sets `--model`, and never writes `.dex/config.json`. The model is whatever the user's codex install defaults to.
+**Backend is fixed to codex**: the skill never asks which backend and never writes `.dex/config.json`. `apply` runs **`gpt-5.6-luna` at `high`**, `review` runs **`gpt-5.6-sol` at `high`** — two `codex-<model>-<effort>` entries Step 4 provisions automatically, so neither phase inherits from `~/.codex/config.toml`. Either phase can be re-pointed with `$CODEX_MODEL_*` / `$CODEX_EFFORT_*` (Step 4 provisions the derived entry) or at an entry you named yourself (`$DEX_CLI_BUILD` / `$DEX_CLI_REVIEW`, which wins) — see Step 6 and `docs/codex-tuning.md`.
 
 ---
 
@@ -18,9 +18,9 @@ The plan is the **source of truth**. Do NOT re-interview the user, regenerate re
 
 1. Locate and validate the implementation plan
 2. Translate plan tasks into a dex checkbox-group `plan.md`
-3. Preflight (dex + codex on PATH; branch guard)
+3. Preflight (dex + codex on PATH; verify entitlement and provision the two `codex-<model>-<effort>` backends; branch guard)
 4. One confirmation before the autonomous chain
-5. Run `dex import` → `dex --cli codex apply` → `dex --cli codex review`
+5. Run `dex import` → `dex --cli "${DEX_CLI_BUILD:-codex-${CODEX_MODEL_BUILD:-gpt-5.6-luna}-${CODEX_EFFORT_BUILD:-high}}" apply` → `dex --cli "${DEX_CLI_REVIEW:-codex-${CODEX_MODEL_REVIEW:-gpt-5.6-sol}-${CODEX_EFFORT_REVIEW:-high}}" review`
 6. Show the handoff report
 
 **Output file:** `tasks/dex-plan.md` — the translated plan, then installed by `dex import` into `.dex/plan.md`.
@@ -105,7 +105,40 @@ If a verification step requires human judgment ("inspect the output", "if WARN l
 1. **`dex` on PATH:** `command -v dex` — else STOP: "dex not found. Install: `curl -sSfL https://raw.githubusercontent.com/francescoalemanno/dex/main/install.sh | bash`".
 2. **`codex` on PATH:** `command -v codex` — else STOP: "codex CLI not found; this skill runs dex with the codex backend."
 3. **`--cli` flag form:** `dex --cli codex --help` should exit 0 — confirms `--cli` is accepted as a global option (the form Step 6 uses). If this fails, a future dex version may have moved `--cli` under the subcommand; run `dex --help` to check and adjust the Step 6 commands accordingly. (Validated against dex 0.4.9, where `--cli` is global.)
-4. **Branch guard:** get the current branch (`git rev-parse --abbrev-ref HEAD`). If it is `main` or `master`, resolve a feature branch (use a name the user provided, else ask for one) and `git switch -c <name>` before any `dex apply`. `dex apply` auto-commits across iterations — those commits must land on a throwaway branch, never `main`/`master`.
+4. **Provision the model+effort-pinned backends** (idempotent — a no-op on every run after the first). dex has neither a `--model` nor an effort flag, so a phase can only run on a pinned model at a pinned effort by naming a `clis` entry that carries both. Each phase resolves to `codex-<model>-<effort>`; provision those two entries, add them if missing, never overwrite one that exists — and **verify entitlement first**, because a pinned model is the one thing that can be wrong on a machine that never opted in:
+
+   ```bash
+   DEX_CFG="${XDG_CONFIG_HOME:-$HOME/.config}/dex/config.json"
+   MC="$HOME/.codex/models_cache.json"
+   mkdir -p "$(dirname "$DEX_CFG")"
+   [ -s "$DEX_CFG" ] || echo '{}' > "$DEX_CFG"
+   for slot in "${CODEX_MODEL_BUILD:-gpt-5.6-luna}:${CODEX_EFFORT_BUILD:-high}" \
+               "${CODEX_MODEL_REVIEW:-gpt-5.6-sol}:${CODEX_EFFORT_REVIEW:-high}"; do
+     model="${slot%:*}"; effort="${slot#*:}"; cli="codex-$model-$effort"
+     if [ -s "$MC" ] && ! jq -e --arg m "$model" --arg e "$effort" \
+          '.models[] | select(.slug==$m) | [.supported_reasoning_levels[].effort] | index($e)' "$MC" >/dev/null 2>&1; then
+       echo "UNAVAILABLE: '$model' at effort '$effort' — entitled: $(jq -r '[.models[].slug] | join(", ")' "$MC")"
+       continue
+     fi
+     jq -e --arg c "$cli" '.clis[$c]' "$DEX_CFG" >/dev/null 2>&1 || {
+       tmp=$(mktemp)
+       jq --arg c "$cli" --arg m "$model" --arg e "$effort" \
+         '.clis[$c] = {command:"codex", args:["exec","--yolo","--ephemeral","--json","-m",$m,"-c","model_reasoning_effort=\($e)"], stdin:true, env:{}, output_format:"json_nd"}' \
+         "$DEX_CFG" > "$tmp" && mv "$tmp" "$DEX_CFG" \
+         && echo "provisioned dex backend '$cli' in $DEX_CFG"
+     }
+   done
+   ```
+
+   With nothing set this provisions `codex-gpt-5.6-luna-high` for apply and `codex-gpt-5.6-sol-high` for review. **Any `UNAVAILABLE` line → STOP** and report it with the entitled list: the entry is deliberately not written, so continuing would only reach dex's `unknown CLI` (which exits 0) several minutes later.
+
+   The write is **additive**: jq creates `.clis` if absent and leaves every other key (the user's `timeout`, `cli` default, and their own entries) untouched. The `jq -e` guard means a user who has already defined the entry keeps their version. Mention it in the Step 5 confirmation if a `provisioned` line printed — it edits a file outside the repo, so it should not be silent, but it needs no approval: additive keys in a local config, removable with `jq 'del(.clis["codex-gpt-5.6-luna-high"])'`.
+
+   **The entitlement check replaced an allowlist, because model×effort cannot be enumerated.** It reads codex's own `models_cache.json`, so it validates the pair *this account* can actually run — `gpt-5.6-luna` at `ultra` fails (luna caps at `max`) even though both words are individually valid. It is skipped, not failed, when the cache is absent: that file is a cache, and treating a cold one as "unentitled" would block a machine whose model is fine. A `$DEX_CLI_*` name the user chose bypasses this loop entirely and is never auto-created — that entry is theirs to define, and inventing one would turn a typo into a silently-working backend.
+
+   **The `codex-` prefix is load-bearing, not cosmetic** — the Step 6 live-worker guard greps for the literal `dex --cli codex`. The derived names keep it (`codex-gpt-5.6-luna-high`). If you ever rename these entries, that guard goes blind to its own worker.
+
+5. **Branch guard:** get the current branch (`git rev-parse --abbrev-ref HEAD`). If it is `main` or `master`, resolve a feature branch (use a name the user provided, else ask for one) and `git switch -c <name>` before any `dex apply`. `dex apply` auto-commits across iterations — those commits must land on a throwaway branch, never `main`/`master`.
 
 ## Step 5: Confirm
 
@@ -116,7 +149,8 @@ plan-to-dex — ready to run
 --------------------------
 Source plan: <path>
 Tasks:       <N>  (→ <N> dex iterations)
-Backend:     codex  (dex --cli codex)
+Backend:     apply → <${DEX_CLI_BUILD:-codex-${CODEX_MODEL_BUILD:-gpt-5.6-luna}-${CODEX_EFFORT_BUILD:-high}}>
+             review → <${DEX_CLI_REVIEW:-codex-${CODEX_MODEL_REVIEW:-gpt-5.6-sol}-${CODEX_EFFORT_REVIEW:-high}}>
 Branch:      <resolved branch>
 Manual criteria (codex will tick without proof):
   - [manual] <text>            # omit this block if none
@@ -127,29 +161,46 @@ then run a multi-reviewer pass. Proceed? [y/N]
 
 This is the standard confirm-before-a-hard-to-reverse-action check, NOT a plan review gate — the plan was hardened upstream. If the user declines, stop (the `tasks/dex-plan.md` file is already written for them to inspect).
 
+Both backend names state their own model and effort, so the confirmation needs no extra annotation — `codex-gpt-5.6-luna-high` says exactly what will run. Nothing is inherited from `~/.codex/config.toml` any more: both phases are pinned.
+
 ## Step 6: Run the dex Chain
 
-Run these in order, streaming output. Do NOT set `--model`; do NOT edit `.dex/config.json`.
+Run these in order, streaming output.
 
 ```bash
 dex import --force tasks/dex-plan.md
-dex --cli codex apply        # long-running — see the poll-to-completion contract below
-dex --cli codex review       # ALSO long-running — same poll-to-completion contract
+dex --cli "${DEX_CLI_BUILD:-codex-${CODEX_MODEL_BUILD:-gpt-5.6-luna}-${CODEX_EFFORT_BUILD:-high}}" apply   # long-running — see the poll-to-completion contract below
+dex --cli "${DEX_CLI_REVIEW:-codex-${CODEX_MODEL_REVIEW:-gpt-5.6-sol}-${CODEX_EFFORT_REVIEW:-high}}" review              # ALSO long-running — same poll-to-completion contract
 ```
 
 `--cli` is a **global** dex option (validated against dex 0.4.9) and must precede the subcommand — `dex --cli codex apply`, not `dex apply --cli codex` (the latter errors with `Unrecognized argument: --cli`). `dex import` takes a path arg and needs no `--cli`.
+
+**Why each phase names a different backend.** dex 0.4.9 has **no** `--model` flag and no reasoning-effort option — `dex --help` lists only `--cli`, `--verbose`, `--timeout`, `--update-prompts`. The single lever is *which* `clis` entry `--cli` names, so running the two phases on different models requires two entries, which Step 4 provisions — that is why this needs no setup on the user's part.
+
+**Each phase resolves its backend in one expansion, three-way.** Explicit entry (`$DEX_CLI_*`) wins; else `codex-<model>-<effort>` built from `$CODEX_MODEL_*` / `$CODEX_EFFORT_*`, the entry Step 4 provisions; else the phase's pinned default. Type the fragment **literally** — never resolve it to a concrete entry name yourself. It resolves to:
+
+| Set | apply | review |
+|---|---|---|
+| nothing | `codex-gpt-5.6-luna-high` | `codex-gpt-5.6-sol-high` |
+| `CODEX_EFFORT_BUILD=xhigh` | `codex-gpt-5.6-luna-xhigh` | `codex-gpt-5.6-sol-high` |
+| `CODEX_MODEL_REVIEW=gpt-5.6-terra` | `codex-gpt-5.6-luna-high` | `codex-gpt-5.6-terra-high` |
+| `DEX_CLI_BUILD=mine` | `mine` | `codex-gpt-5.6-sol-high` |
+
+**The split is deliberate: the cheap fast model implements, the frontier model reviews.** `apply` runs `gpt-5.6-luna` ("fast and affordable agentic coding") because implementation is the bulk of the token spend and the work is already specified by a hardened plan; `review` runs `gpt-5.6-sol` ("latest frontier agentic coding") because adversarial review is where depth pays for itself. Both at `high`. Neither phase inherits from `~/.codex/config.toml` any more — the pipeline behaves identically on every machine, at the cost of a pinned slug that will eventually age out, which is what Step 4's entitlement check catches.
+
+If dex answers `unknown CLI "<name>"` (note: it prints this and still **exits 0** — check the output, not the status), either the user named a `$DEX_CLI_*` entry that is not in their dex config, or Step 4 refused to provision the derived entry because the model/effort pair was unavailable. Report it verbatim and stop; do not silently fall back to `codex`, which would run the phase on the machine's own model without saying so.
 
 ### `dex apply` AND `dex review` are long-running — poll each to completion in THIS invocation
 
 Both phases drive codex through work that **will likely exceed a single foreground Bash timeout** (the harness caps foreground Bash at 10 minutes / `600000ms`). Run each foreground with the **maximum timeout**, then **loop** — the contract is identical for both.
 
 **`dex apply`:**
-1. Run `dex --cli codex apply` (foreground, `timeout: 600000`).
+1. Run `dex --cli "${DEX_CLI_BUILD:-codex-${CODEX_MODEL_BUILD:-gpt-5.6-luna}-${CODEX_EFFORT_BUILD:-high}}" apply` (foreground, `timeout: 600000`).
 2. Re-read `.dex/plan.md` after the pass.
-3. If any checkbox is still `[ ]` **and** dex did not report a terminal state, run `dex --cli codex apply` again (it resumes where it left off).
+3. If any checkbox is still `[ ]` **and** dex did not report a terminal state, run the same command again (it resumes where it left off).
 4. Repeat until **all checkboxes are `[x]`** or dex reports terminal (`STALEMATE` / non-zero exit).
 
-**`dex review`:** the same loop — re-run `dex --cli codex review` foreground at max timeout every time the 10-min ceiling truncates it, until it reaches a terminal state: it prints its completion line (`Review complete` / `DONE`) and/or writes `.dex/review-*.md`, or reports a terminal `STALEMATE` / non-zero exit. **Terminal on quota:** if codex exhausts its usage quota *after* apply is fully done (every `.dex/plan.md` checkbox `[x]`) and at least one reviewer pass has written its findings, treat the quota state as terminal — report it and stop. Do NOT loop forever on quota backoff.
+**`dex review`:** the same loop — re-run `dex --cli "${DEX_CLI_REVIEW:-codex-${CODEX_MODEL_REVIEW:-gpt-5.6-sol}-${CODEX_EFFORT_REVIEW:-high}}" review` foreground at max timeout every time the 10-min ceiling truncates it, until it reaches a terminal state: it prints its completion line (`Review complete` / `DONE`) and/or writes `.dex/review-*.md`, or reports a terminal `STALEMATE` / non-zero exit. **Terminal on quota:** if codex exhausts its usage quota *after* apply is fully done (every `.dex/plan.md` checkbox `[x]`) and at least one reviewer pass has written its findings, treat the quota state as terminal — report it and stop. Do NOT loop forever on quota backoff.
 
 > ⚠️ **Co-edit warning:** the FORBIDDEN list and the pre-return verification below are duplicated **verbatim** into `/ship-it`'s execute-and-report subagent prompt (`skills/ship-it/SKILL.md`) and summarized in `docs/skills/plan-to-dex.md`. `/ship-it` must carry its own copy — the guard binds the *invoking subagent*, whose backgrounded processes are reaped on return, not the skill it invokes. Touch any of the three and touch all three: `grep -rn '\[d\]ex --cli codex' skills/ docs/` finds every site.
 
@@ -176,6 +227,8 @@ Do NOT return until you have **run these three checks and can state their result
    prints **nothing**. Two details are load-bearing, and a bare `pgrep -fl 'dex --cli codex|codex exec'` gets both wrong:
    - **Scope to your own worktree.** Concurrent `/ship-it` runs in sibling worktrees have their own `dex --cli codex apply` and `codex exec` processes. A machine-wide `pgrep` sees them, reports a "live worker" that is not yours, and makes this check permanently unsatisfiable. The `lsof -d cwd` filter keeps only processes whose working directory is under this worktree.
    - **Bracket the first character** (`[d]ex`, `[c]odex`). Without it the pattern matches the command line of the shell running the check — the check reports itself as a live worker and never passes.
+
+   The pattern is a literal prefix, so a custom `$DEX_CLI_BUILD`/`$DEX_CLI_REVIEW` entry still matches **as long as it is named `codex-*`** (`dex --cli codex-deep apply` contains `dex --cli codex`). If the user named theirs something else, say so in the handoff report — the guard is blind to it and cannot prove the worker exited.
 
    **Never kill, signal, or wait on a process you did not start.** A sibling run's dex is not your problem, and killing it corrupts that run. If this check still prints after your own foreground `dex` command returned, you backgrounded it — that is the only failure it is looking for.
 3. **Commits landed:** `git log --oneline` shows per-task dex commits (not just the lone `dex import` setup commit), and `git status` is as expected.

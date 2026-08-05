@@ -1,10 +1,10 @@
 # Claude Skills
 
-A [Claude Code](https://claude.com/claude-code) plugin bundling **orchestration skills** — multi-agent pipelines, adversarial review loops, cross-model synthesis, and workflow support — that drive Codex, [dex](https://github.com/francescoalemanno/dex), and local models to do the heavy lifting.
+A [Claude Code](https://claude.com/claude-code) plugin bundling **orchestration skills** — multi-agent pipelines, adversarial review loops, and workflow support — that drive Codex, [dex](https://github.com/francescoalemanno/dex), and local models to do the heavy lifting.
 
 ## Skills
 
-Twelve skills, grouped by where they fit in a feature's life. Each is a slash command.
+Nine skills, grouped by where they fit in a feature's life. Each is a slash command.
 
 ### Plan — sharpen intent before code
 
@@ -19,7 +19,6 @@ Twelve skills, grouped by where they fit in a feature's life. Each is a slash co
 | Skill | What it does | Needs |
 |---|---|---|
 | `/plan-to-dex` | Runs a hardened [Superpowers](https://github.com/obra/superpowers) plan through the dex orchestrator: translates it into dex's checkbox `plan.md` (one task = one iteration), then runs `dex apply` → `dex review` autonomously with Codex as the backend. | `dex` + `codex` |
-| `/swarm-execute` | Implements a feature as parallel user stories: Claude orchestrates via the Workflow tool, Codex workers write all code in isolated worktrees, architect + QA reviews gate every merge. Takes plain language or a spec file. | `codex` |
 | `/ship-it` | Pure conductor: spec → reviewed PR in one invocation. Chains `/spec-review-codex`, plan-writing, `/plan-to-dex`, PR creation, `/review-pr` + fix passes, and a closing `/architect-review-pr` completeness report. Autonomous, best-effort; records leftover findings instead of halting. | `codex`, `dex`, `pr-review-toolkit`, `commit-commands` |
 
 ### Review — check the finished work
@@ -28,7 +27,6 @@ Twelve skills, grouped by where they fit in a feature's life. Each is a slash co
 |---|---|---|
 | `/architect-review-pr` | Completeness & wiring review of a built feature — hunts code created but never wired, referenced-but-missing symbols, half-finished paths. Scopes to the branch diff, traces the whole repo, cites the empty search that proves each gap. Report-only. | — |
 | `/review-codebase` | Whole-system adversarial audit across three lenses at once (codebase / docs / process) via three parallel subagents, each writing a ranked report to `docs/audits/`; optional fix pass on CRITICAL findings. | — |
-| `/fusion` | Blind multi-model panel (2× Opus + GPT via `codex` + local via `pi`) → separate Opus judge synthesizes one verdict. Subscription-only, no API keys; unavailable seats drop gracefully. Pass `opus`/`codex`/`local` to restrict the panel. | `codex`, `pi` + LMStudio (per seat) |
 
 ### Maintain — keep the workspace lean
 
@@ -36,7 +34,6 @@ Twelve skills, grouped by where they fit in a feature's life. Each is a slash co
 |---|---|---|
 | `/handoff` | Compacts the current conversation into a handoff doc so a fresh agent can pick up — includes a "suggested skills" section, references artifacts by path, redacts secrets/PII. | — |
 | `/claude-md-slim` | The inverse of claude-md-improver: pages bloated `CLAUDE.md` detail out to `docs/` behind one-line pointers, keeping only session-invariant rules always-on. Moves, never deletes. | — |
-| `/orbstack-compatible` | Stops a Docker Compose project colliding on host ports across worktrees by moving services onto OrbStack routable domains (`<service>.<project>.orb.local`); verifies live. | OrbStack |
 
 ## Install
 
@@ -70,9 +67,11 @@ claude --plugin-dir ./claude-skills
 
 ## How it fits together
 
-The skills are composable. A typical flow: `/blind-spot` before you start → `/spec-review-codex` (or `-local`) to harden the design → `/plan-to-dex` or `/swarm-execute` to build → `/architect-review-pr` to check wiring → `/handoff` if you run out of context. `/ship-it` chains most of that into a single autonomous pass. `/fusion` and `/review-codebase` are standalone second opinions you can reach for anytime.
+The skills are composable. A typical flow: `/blind-spot` before you start → `/spec-review-codex` (or `-local`) to harden the design → `/plan-to-dex` to build → `/architect-review-pr` to check wiring → `/handoff` if you run out of context. `/ship-it` chains most of that into a single autonomous pass. `/review-codebase` is a standalone second opinion you can reach for anytime.
 
 Per-skill detail and conventions live in [`docs/skills/`](docs/skills/).
+
+The skills that drive `codex` (directly or through `dex`) run their **review** passes at `xhigh` reasoning effort regardless of what your `~/.codex/config.toml` says, and leave code-writing at your own setting. That needs no setup on your part. See [`docs/codex-tuning.md`](docs/codex-tuning.md) for why, and for the environment variables that override it.
 
 ## License
 

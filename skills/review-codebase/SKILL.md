@@ -21,7 +21,7 @@ are **embedded as templates** and each is dispatched to its own fresh-context su
 **Why fresh subagents (the adversarial mechanism).** Each audit re-derives its findings from
 the code alone, with no memory of how the system was built — the same independence rationale
 as `/architect-review-pr`. Three run in **parallel**, isolated, so each full-repo audit's raw
-output stays out of the main loop (the `/fusion` panel pattern). No external CLI — subagents
+output stays out of the main loop. No external CLI — subagents
 are Claude `Agent`s, so the skill installs anywhere.
 
 **Report + optional fix.** Each audit is report-first: it writes a ranked, ID'd findings report
