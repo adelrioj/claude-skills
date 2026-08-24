@@ -1,7 +1,7 @@
 {
   "name": "claude-skills",
-  "description": "Skills for autonomous story execution (dex orchestrator), adversarial spec review (Codex or local LMStudio), completeness & wiring review (architect-review-pr), whole-repo three-lens audit (review-codebase), pre-task blind-spot discovery (blind-spot), CLAUDE.md minimizer (claude-md-slim), spec-to-PR conductor (ship-it), and workflow helper (handoff)",
-  "version": "1.2.15",
+  "description": "Skills for autonomous story execution (dex orchestrator), adversarial spec review (Codex or local LMStudio), completeness & wiring review (architect-review-pr), whole-repo three-lens audit (review-codebase), pre-task blind-spot discovery (blind-spot), CLAUDE.md minimizer (claude-md-slim), spec-to-PR conductor (ship-it), Symphony pipeline handoff (spec-to-symphony), Linear ticket filing (to-linear), grooming (linear-groom-ticket), triage (linear-triage-ticket), spec-onto-ticket (linear-spec-ticket), and workflow helper (handoff)",
+  "version": "1.3.0",
   "author": {
     "name": "adelrioj",
     "url": "https://github.com/adelrioj"
@@ -18,6 +18,8 @@
     "adversarial-review",
     "audit",
     "conductor",
-    "pipeline"
+    "pipeline",
+    "linear",
+    "symphony"
   ]
 }

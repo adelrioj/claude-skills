@@ -1,0 +1,22 @@
+{
+  "id": "x",
+  "ok": true,
+  "result": {
+    "issue": {
+      "id": "issue-nbs-243",
+      "identifier": "NBS-243",
+      "title": "lab deploy failed at CI",
+      "description": "lab deploy failed at CI\n\nhttps://github.com/acme/nimbus/actions/runs/32082281184\n",
+      "team": { "key": "NBS", "name": "Nimbus" },
+      "labels": [],
+      "branchName": "nbs-243-lab-deploy-failed-at-ci",
+      "url": "https://linear.app/acme/issue/NBS-243"
+    },
+    "comments": [],
+    "children": [],
+    "attachments": [],
+    "relations": [],
+    "activity": []
+  },
+  "_meta": {}
+}

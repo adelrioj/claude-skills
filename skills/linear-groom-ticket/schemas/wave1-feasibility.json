@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "linear-groom wave-1 feasibility output",
+  "type": "object",
+  "additionalProperties": false,
+  "if": {
+    "properties": { "verdict": { "const": "delete-candidate" } },
+    "required": ["verdict"]
+  },
+  "then": {
+    "comment": "A delete-candidate verdict must carry a machine-readable reason. Without this, a schema-valid output can satisfy all four safeguard conditions and yield a plan whose comment reads \"proposed deletion for reason 'None'\" — a ticket condemned with no reason. Prose in prompts/veracity.md asked for it; the spec assigns the rule to deterministic code, so it is enforced here as well as in 40-synthesize.py (which treats the same shape as incoherent) and 90-apply.py's preflight.",
+    "required": ["delete_reason"],
+    "properties": {
+      "delete_reason": {
+        "enum": ["duplicate", "already-resolved", "obsolete", "unactionable"]
+      }
+    }
+  },
+  "required": ["dimension", "verdict", "confidence", "deletion_stance", "findings", "evidence"],
+  "properties": {
+    "dimension": { "const": "feasibility" },
+    "verdict": { "enum": ["ok", "needs-work", "delete-candidate"] },
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "deletion_stance": { "enum": ["supports", "neutral", "opposes"] },
+    "delete_reason": {
+      "enum": ["duplicate", "already-resolved", "obsolete", "unactionable", null]
+    },
+    "duplicate_of": { "type": ["string", "null"] },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["summary"],
+        "properties": {
+          "summary": { "type": "string", "minLength": 1 },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "ref"],
+        "properties": {
+          "kind": { "enum": ["commit", "file", "issue"] },
+          "ref": { "type": "string", "minLength": 1 },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}

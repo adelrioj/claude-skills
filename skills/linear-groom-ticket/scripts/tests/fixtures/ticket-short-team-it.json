@@ -1,0 +1,22 @@
+{
+  "id": "req-4",
+  "ok": true,
+  "result": {
+    "issue": {
+      "id": "cccc",
+      "identifier": "IT-7",
+      "title": "Regression fixture: two-letter team key colliding with common words",
+      "description": "## 🎯 Contexto\n\nFixture only, for repocheck false-match regression coverage.\n",
+      "team": { "id": "t3", "name": "Iota", "key": "IT" },
+      "labels": [],
+      "branchName": "someone/it-7-fixture",
+      "url": "https://linear.app/acme/issue/IT-7/x"
+    },
+    "comments": [],
+    "children": [],
+    "attachments": [],
+    "relations": [],
+    "activity": []
+  },
+  "_meta": {}
+}

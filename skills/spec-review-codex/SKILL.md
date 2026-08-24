@@ -10,7 +10,9 @@ Adversarial review of design specs using Codex as an independent reviewer. Loops
 
 **Why a different agent:** The spec was written by this Claude instance. Self-review has author bias — the same blind spots that produced the issue prevent detecting it. Codex is a fresh model with no shared conversation context, making it an effective adversarial reviewer. Codex has filesystem access, so it verifies file paths and code references against the actual repo.
 
-**Sibling skill:** `spec-review-local` does the same review with a local model served by LMStudio — use it when offline or when Codex is unavailable.
+**Sibling skills:** `spec-review-local` does the same review with a local model served by LMStudio — use it when offline or when Codex is unavailable, and keep the two `spec-review-prompt.md` copies byte-identical. `/linear-spec-ticket` writes the spec this hardens and deliberately never runs this review itself; `/ship-it` invokes this as its first step.
+
+**This skill edits the spec in place, which means any copy of it elsewhere goes stale.** In particular, `/linear-spec-ticket` uploads the spec to its Linear ticket as an attachment, and that attachment is not updated by anything here. Step 5 names the one command that fixes it. Do not run that command yourself — this skill's writes stop at the file.
 
 ---
 
@@ -25,7 +27,27 @@ Adversarial review of design specs using Codex as an independent reviewer. Loops
 
 **Do NOT** proceed to implementation planning until the spec passes review.
 
-**Prerequisite:** `codex` must be on PATH and authenticated. Verify with `command -v codex` — abort with a clear error if missing.
+**Prerequisite:** `codex` must be on PATH **and authenticated**. Both are checked in Step 0, before the first review is attempted.
+
+---
+
+## Step 0: Preflight — on PATH, and Logged In
+
+Two sub-second checks. Run them before anything else; **either one failing is a STOP, not a retry.**
+
+```bash
+command -v codex >/dev/null 2>&1 || { echo "CODEX-MISSING"; exit 1; }
+codex login status                || { echo "CODEX-UNAUTHENTICATED"; exit 1; }
+```
+
+| Outcome | Report, verbatim | Human action |
+|---|---|---|
+| `CODEX-MISSING` | `codex CLI not found on PATH. This skill has no fallback reviewer.` | install the codex CLI |
+| `CODEX-UNAUTHENTICATED` | `codex is installed but not authenticated (\`codex login status\` → not logged in). No review was attempted.` | run `codex login` (interactive browser flow), or set a valid `OPENAI_API_KEY` for the codex CLI |
+
+**Why this exists, and why it is not folded into Step 2's error handling.** An expired credential and a genuine timeout produce the *same* symptom downstream — `codex exec` hangs, hits the 120s cap, and returns nothing — so a run against dead auth burns two full attempts and four minutes, then reports "could not run" without saying which. That is exactly what happened on an observed run's spec-review stage. `codex login status` answers the question in well under a second and names the remediation, and the two failures need *different* human actions: a timeout says *retry or reduce scope*, dead auth says *log in* — nothing else will ever make it work.
+
+**Never treat an unauthenticated codex as a timeout, and never retry through it.** Retrying a 401 is the one loop guaranteed to cost the full budget and learn nothing. Equally: **never silently skip the review.** An autonomous caller (`/ship-it`, a Symphony stage) may be instructed to advance anyway — that is *its* decision to record, made from this skill's explicit `CODEX-UNAUTHENTICATED` report, not something to decide here by returning a hollow PASS. There is no verdict without a review.
 
 ---
 
@@ -79,9 +101,9 @@ Run this via Bash. Codex's final message (the findings) lands in `$FINDINGS_FILE
 
 **Pinning a model has a real cost, accepted deliberately here:** slugs age and entitlements vary, so `gpt-5.6-sol` will eventually be gone or unavailable on some account, and codex fails with an unhelpful error. `ship-it`'s preflight verifies the resolved model *and* its effort against `~/.codex/models_cache.json` before spending a run. Invoked standalone, this skill has no such gate — if codex rejects the model, re-run with `CODEX_MODEL_REVIEW=<an entitled slug>`. See `docs/codex-tuning.md`.
 
-**Timeout:** 120 seconds. If Codex times out, report the timeout to the user and ask whether to retry or skip.
+**Timeout:** 120 seconds. If Codex times out, report the timeout **as a timeout** — Step 0 has already proven the credential was live, so this is a slow or oversized review, not an auth problem — and ask whether to retry or skip.
 
-**On failure** (codex not authenticated, network error): codex will exit non-zero. Report the exact stderr to the user and stop — do not loop.
+**On any other failure** (network error, model rejected, entitlement): codex exits non-zero. Report the exact stderr to the user and stop — do not loop. If the stderr mentions `401`, `Unauthorized`, or an invalid/expired token, say plainly that the credential died *between* Step 0 and here and name `codex login` — do not retry, and do not let it read as a timeout.
 
 ---
 
@@ -141,6 +163,15 @@ When Codex returns PASS:
 > "N MINOR suggestions (non-blocking): [titles]"
 
 The spec is now ready for implementation planning.
+
+**Then name the stale copy, if there is one.** The spec file has just been edited in place. If its filename is identifier-keyed (`<IDENT>-design.md`, which is what `/linear-spec-ticket` writes), a Linear ticket is almost certainly carrying the *pre-review* draft as an attachment. Add two lines to the report and stop — do not run either one:
+
+```
+Next:  /linear-spec-ticket <IDENT> refresh   — re-upload the hardened spec to the ticket
+       /spec-to-symphony <IDENT>             — push it to the remote and arm the pipeline
+```
+
+For a date-prefixed spec there is no ticket to infer, so say nothing.
 
 ---
 

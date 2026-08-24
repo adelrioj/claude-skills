@@ -1,0 +1,8 @@
+# One stopword per line. '#' comments and blank lines are ignored.
+# Spanish
+el la los las un una unos unas de del al a en y o u que se su sus por para con
+sin sobre entre como mas más ya no si sí lo le les es son ser está están hay
+donde cuando desde hasta este esta estos estas ese esa eso aquel cual cuales
+# English
+the a an of to in and or for with without on at from by is are be as that this
+these those it its into out up down we you they he she them us

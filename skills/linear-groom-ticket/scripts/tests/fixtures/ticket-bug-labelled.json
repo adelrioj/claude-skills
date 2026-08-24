@@ -1,0 +1,38 @@
+{
+  "id": "req-1",
+  "ok": true,
+  "result": {
+    "issue": {
+      "id": "issue-901",
+      "identifier": "NBS-901",
+      "title": "Lifted JOIN predicate is dropped for nested COBOL copybooks",
+      "description": "## Summary\n\n`CobolJoinLifter` drops the predicate when the copybook nests, so the translated query returns\nevery row — see `parser/cobol/JoinLifter.java:212`.\n\n## Steps to Reproduce\n\n1. Parse a copybook with a nested `OCCURS` group.\n2. Read the generated SQL.\n\n## Expected Behavior\n\nThe `WHERE` clause carries the lifted predicate.\n\n## Actual Behavior\n\nThe predicate is absent and the query is unfiltered.\n",
+      "team": {
+        "id": "t1",
+        "name": "Nimbus",
+        "key": "NBS"
+      },
+      "state": {
+        "id": "aa940ba5",
+        "name": "To Do",
+        "type": "unstarted",
+        "color": "#2642b7"
+      },
+      "labels": [
+        {
+          "id": "l9",
+          "name": "Bug",
+          "color": "#EB5757"
+        }
+      ],
+      "branchName": "nbs-901-lifted-join-predicate-dropped",
+      "url": "https://linear.app/acme/issue/NBS-238/x"
+    },
+    "comments": [],
+    "children": [],
+    "attachments": [],
+    "relations": [],
+    "activity": []
+  },
+  "_meta": {}
+}

@@ -1,0 +1,26 @@
+{
+  "id": "req-3",
+  "ok": true,
+  "result": {
+    "issue": {
+      "id": "bbbb",
+      "identifier": "DP-1",
+      "title": "Regression fixture: two-letter team key",
+      "description": "## 🎯 Contexto\n\nFixture only, for repocheck false-match regression coverage.\n",
+      "team": {
+        "id": "t9",
+        "name": "Data Platform",
+        "key": "DP"
+      },
+      "labels": [],
+      "branchName": "someone/om-12-fixture",
+      "url": "https://linear.app/acme/issue/OM-12/x"
+    },
+    "comments": [],
+    "children": [],
+    "attachments": [],
+    "relations": [],
+    "activity": []
+  },
+  "_meta": {}
+}

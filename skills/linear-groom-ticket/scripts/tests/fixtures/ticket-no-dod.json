@@ -1,0 +1,26 @@
+{
+  "id": "req-2",
+  "ok": true,
+  "result": {
+    "issue": {
+      "id": "aaaa",
+      "identifier": "NBS-999",
+      "title": "Arreglar el bug",
+      "description": "## User Story\n\n## Context\n\nSomething is wrong with the parser.\n\n## Scope\n\nFix it.\n",
+      "team": {
+        "id": "t1",
+        "name": "Nimbus",
+        "key": "NBS"
+      },
+      "labels": [],
+      "branchName": "dev/nbs-999-arreglar-el-bug",
+      "url": "https://linear.app/acme/issue/NBS-999/x"
+    },
+    "comments": [],
+    "children": [],
+    "attachments": [],
+    "relations": [],
+    "activity": []
+  },
+  "_meta": {}
+}

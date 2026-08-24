@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "linear-groom application plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ticket", "verdict", "original_description", "labels_add", "relations", "comments"],
+  "properties": {
+    "ticket": { "type": "string", "minLength": 1 },
+    "verdict": { "enum": ["READY", "FIXABLE", "DELETE-CANDIDATE"] },
+    "reason": { "enum": ["duplicate", "already-resolved", "obsolete", "unactionable", null] },
+    "original_description": { "type": "string" },
+    "description_new": { "type": ["string", "null"] },
+    "labels_add": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "relations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "related"],
+        "properties": {
+          "type": { "enum": ["duplicate-of", "related", "blocks", "blocked-by"] },
+          "related": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "comments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["body"],
+        "properties": { "body": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "evidence": { "type": "array" },
+    "unavailable_dimensions": { "type": "array", "items": { "type": "string" } },
+    "safeguard": { "type": "object" }
+  }
+}

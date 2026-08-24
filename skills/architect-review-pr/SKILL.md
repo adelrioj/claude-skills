@@ -1,6 +1,6 @@
 ---
 name: architect-review-pr
-description: "Use after a feature is built — e.g. the final step of a ship-it run, right after review-pr — to check it is actually complete and wired, not just line-correct. Dispatches a fresh-context Claude subagent that traces the whole repo to hunt completeness and integration gaps in the branch's changes, then reports ranked, evidence-backed findings and fixes nothing. Triggers on: architect review, architecture review, completeness review, wiring review, is this wired, did we finish this, find the gaps, incomplete feature, created but not wired, dead code check, deep pass on what we built."
+description: "Use after a feature is built — e.g. the final step of a ship-it run, right after review-pr — to check it is actually complete and wired, not just line-correct. Dispatches a fresh-context Claude subagent that traces the whole repo to hunt completeness and integration gaps in the branch's changes, reports ranked, evidence-backed findings, then fixes the CRITICAL ones and verifies with a fresh re-review (capped at 3 passes; pass report-only to skip fixing). Triggers on: architect review, architecture review, completeness review, wiring review, is this wired, did we finish this, find the gaps, incomplete feature, created but not wired, dead code check, deep pass on what we built."
 user-invocable: true
 ---
 
@@ -13,9 +13,13 @@ finished implementation. It answers the question the other review skills don't:
 > as intended. Find gaps, bits we didn't implement, code created but never wired,
 > failure cases, edge cases."
 
-This skill is a **finder, not a fixer** — like `/ponytail-audit`, it reports ranked,
-evidence-backed findings and **edits nothing**. Contrast `/spec-review-codex`, which
-fix-loops. There is no fix loop, no convergence logic, and no external CLI dependency.
+This skill **finds first, then fixes what is CRITICAL** — the same review-then-fix shape
+`/ship-it` Step 6 drives around `/review-pr`. The reviewer subagent is a pure finder: it
+reports ranked, evidence-backed findings and **edits nothing**. Then the main loop applies
+a fix for each CRITICAL finding and re-dispatches a *fresh* reviewer to verify, converging
+or capping at 3 passes like `/spec-review-codex`. IMPORTANT and below stay report-only.
+Pass a bare `report-only` token to skip the fix loop entirely (`/ship-it` Step 7 does —
+its conductor owns its own fix/commit loop).
 
 **Where it sits in the family:**
 - `/code-review`, `/review-pr` — line-level *correctness* on the diff.
@@ -30,9 +34,11 @@ written. Same independence rationale as `spec-review-codex`, but a Claude subage
 instead of the `codex` CLI, so the skill has **no external CLI dependency** and installs
 anywhere.
 
-**Why report-only.** The intent is diagnostic — surface what's wrong so the user decides.
-Report-only keeps the skill small (no fix/re-review loop to port) and the findings clean
-(the subagent reviews a *static* tree — no moving target).
+**Why the reviewer never fixes.** The finder's value is a *static* tree and a clean
+adversarial stance — a reviewer that edits mid-review reviews a moving target and starts
+defending its own patches. So fixing is the main loop's job, *between* passes, and every
+verification pass is a **new** fresh-context subagent reading the tree as it now stands.
+Findings below CRITICAL are the user's call, never auto-fixed.
 
 ---
 
@@ -42,12 +48,15 @@ Report-only keeps the skill small (no fix/re-review loop to port) and the findin
 
 1. **In a git repo?** Run `git rev-parse --is-inside-work-tree`. If it fails, STOP with:
    > "Not in a git repository — nothing to review."
-2. **Split the argument before reading any of it as scope.** If it contains a
-   `report-path=<absolute path>` token (that is how `/ship-it` passes
-   `$RUN_DIR/architect-review.md`), take that as the report path and **remove it from the
-   argument**. Whatever remains — possibly nothing — is the scope. Doing this first is the
-   point: read in the other order, a caller's `report-path=…` looks exactly like "the user
-   named a target" in step 3, and the skill reviews its own output path instead of the branch.
+2. **Split the argument before reading any of it as scope.** Strip two tokens first:
+   - a `report-path=<absolute path>` token (that is how `/ship-it` passes
+     `$RUN_DIR/architect-review.md`) — take it as the report path;
+   - a bare `report-only` token — it disables the fix loop (Step 4).
+
+   Remove both from the argument. Whatever remains — possibly nothing — is the scope.
+   Doing this first is the point: read in the other order, a caller's `report-path=…`
+   looks exactly like "the user named a target" in step 3, and the skill reviews its own
+   output path instead of the branch.
 3. **An explicit argument overrides everything.** If what remains names a target (a file, a
    directory, or a feature description), that IS the scope — skip diff computation and
    review exactly what was named (still trace the whole repo for reachability).
@@ -59,8 +68,8 @@ Report-only keeps the skill small (no fix/re-review loop to port) and the findin
    changed, not unrelated drift on the base.)
 5. **No diff AND no scope left after the split** (you are on the base branch, or nothing is
    committed) → **ask the user what to review.** This is the only blocking question — do not
-   guess. A bare `report-path=…` with nothing else counts as "no argument": it says where to
-   write, never what to review.
+   guess. Bare tokens with nothing else count as "no argument": `report-path=…` says where
+   to write and `report-only` says not to fix — neither says what to review.
 6. **Finish resolving the report path.** If step 2 found a `report-path=`, use it verbatim.
    Otherwise mint it:
    `REPORT_PATH="${TMPDIR:-/tmp}/architect-review-pr-$(date +%s).md"`. Hold it in a variable —
@@ -70,7 +79,7 @@ Report-only keeps the skill small (no fix/re-review loop to port) and the findin
    worse failure than having no report at all.
 
 Announce the resolved scope in one line, then proceed:
-> "Architect-reviewing `<scope>`<, oracle: path | code-only>. Dispatching the subagent."
+> "Architect-reviewing `<scope>`<, oracle: path | code-only><, report-only>. Dispatching the subagent."
 
 ### Step 1 — Discover the intent oracle (best-effort)
 
@@ -93,11 +102,12 @@ Dispatch a single fresh subagent via the **Agent tool** (`subagent_type: general
 Compose the prompt from the template below, filling `<BASE>`, `<SCOPE>`, `<ORACLE>`, and
 `<REPORT_PATH>`. The subagent **writes the report file itself and reports only — the report
 path is the one file it may create, and it must edit nothing else.** One subagent, not a panel
-(see Deliberate simplifications).
+(see Deliberate simplifications). This dispatch is review pass 1; the Step 4 fix loop reuses
+this exact prompt for its verification passes.
 
 ### Step 3 — Report
 
-1. **Read the report at `REPORT_PATH`** — the exact path from Step 0.5, not a glob. The
+1. **Read the report at `REPORT_PATH`** — the exact path from Step 0.6, not a glob. The
    subagent authors that file; the conductor does not write it from the return message. A
    subagent that completes its review and then idles without returning sends no message, so a
    conductor that writes what it "received" produces **no report at all** — and one that globs
@@ -107,8 +117,44 @@ path is the one file it may create, and it must edit nothing else.** One subagen
    does not recover a lost hand-off), and do not fall back to a glob.
 3. Present the ranked findings in chat: the summary counts, the findings most-severe
    first, and the completeness verdict.
-4. **STOP. Fix nothing.** If the user wants fixes applied, that is a separate, explicit
-   request — this skill's contract ends at the report.
+4. **No CRITICAL findings, or `report-only` was passed → STOP here. Fix nothing.**
+   IMPORTANT and below are never auto-fixed — they are the user's call. Otherwise
+   continue to the fix loop.
+
+### Step 4 — Fix loop (CRITICAL only; skipped by `report-only`)
+
+CRITICAL findings are fixed by the main loop and verified by a fresh reviewer — the
+fix/re-review shape of `/spec-review-codex`, capped at **3 review passes total** (the
+Step 2 dispatch counts as pass 1).
+
+Each pass:
+
+1. **Apply a fix for every CRITICAL finding in the latest report**, in the main loop,
+   guided by the finding's Location / Evidence / Suggested fix. Announce each as you
+   apply it: `<location> — <one-line fix>`. Working tree only — **never commit**; the
+   user owns git. Stay in scope: each fix answers its finding, nothing else. Skip a
+   CRITICAL only if you judge it a false positive despite the evidence gate — say so,
+   with your counter-evidence.
+2. **If every CRITICAL was skipped** (all judged false positives), stop — an unchanged
+   tree only re-yields the same report. Present the skips; the user arbitrates.
+3. **Re-dispatch a fresh reviewer** — Step 2's prompt verbatim, same scope and oracle,
+   plus one line appended to the scope block: *"Uncommitted fixes in the working tree
+   are part of the feature under review."* (The subagent reads the tree, so it sees
+   them; the line stops it from reporting the dirty tree itself as a finding.) New
+   report path per pass — `REPORT_PATH_N="${REPORT_PATH%.md}.pass-<N>.md"` — never
+   overwrite an earlier pass's report, never glob.
+4. **Read the new report from its exact path.** Missing file → same rule as Step 3.2:
+   say so and stop; the previous pass's report plus the fixes applied stand as the
+   result. Otherwise:
+   - **Zero CRITICALs** → converged. Present the final report, the list of fixes
+     applied, and stop.
+   - **A fixed CRITICAL comes back unchanged** → the fix is contested; do not ratchet.
+     Present both positions (the fix you applied, the reviewer's re-finding) and stop —
+     the user arbitrates.
+   - **New or remaining CRITICALs, and fewer than 3 passes run** → next pass.
+
+After 3 passes, stop even if CRITICALs remain: present the leftovers most-severe first
+and say the cap was hit. Every pass's report stays on disk as the audit trail.
 
 ---
 
@@ -181,10 +227,12 @@ MUST check for indirect wiring and CITE the search that proves the gap:
 A finding with no cited empty-result search is DOWNGRADED to a question, not reported as
 a finding. Cite the actual command you ran and show that it returned nothing.
 
-## Severity (informational ranking — nothing loops on it)
+## Severity (CRITICAL gates the fix loop)
 
-CRITICAL / IMPORTANT / ADVISORY / MINOR. Rank findings most-severe first. Severity is
-triage only; this skill fixes nothing, so severity gates nothing.
+CRITICAL / IMPORTANT / ADVISORY / MINOR. Rank findings most-severe first. Mark CRITICAL
+only what genuinely breaks the feature — an unreachable core path, promised behavior that
+is absent, a data-loss edge — because the caller applies a fix for every CRITICAL you
+report. IMPORTANT and below are informational; nothing loops on them.
 
 ## Output — WRITE the report to <REPORT_PATH>, then return it
 
@@ -214,18 +262,21 @@ The document itself:
 The document is consumed as-is, not machine-parsed — but it is consumed **from the file**.
 ```
 
-The main loop does not parse the result beyond surfacing it — report-only means there is
-no machine-readable contract to enforce. It does depend on `<REPORT_PATH>` existing, for the
-same reason ship-it's three-field hand-off is now written to a file: a subagent's final message
-is a single-delivery, unrecoverable channel that a completed-but-idled subagent never sends.
-The file is the carrier; the return is corroboration. (`review-codebase` has always worked this
-way — its audits write to `docs/audits/` and return only a summary.)
+The main loop parses nothing beyond the findings' severity markers — the report is prose,
+and the fix loop works from the findings as written. It does depend on `<REPORT_PATH>`
+existing, for the same reason ship-it's three-field hand-off is written to a file: a
+subagent's final message is a single-delivery, unrecoverable channel that a
+completed-but-idled subagent never sends. The file is the carrier; the return is
+corroboration. (`review-codebase` has always worked this way — its audits write to
+`docs/audits/` and return only a summary.)
 
 ---
 
 ## What this skill is NOT
 
-- **Not a fixer** — it never edits code. (Contrast `/spec-review-codex`, which fix-loops.)
+- **Not a general fixer** — only CRITICAL findings are auto-fixed, by the main loop
+  between reviewer passes; the reviewer subagent never edits, and nothing is ever
+  committed. `report-only` restores the pure-finder behavior.
 - **Not a correctness linter** — line-level bugs unrelated to completeness are out of
   scope; that is `/code-review` / `/review-pr`. Overlap on integration-caused bugs is
   intentional and fine.
@@ -238,7 +289,10 @@ way — its audits write to `docs/audits/` and return only a summary.)
 - **One subagent, not a panel.** A single well-prompted architect covers the whole
   taxonomy. Upgrade path: fan out one subagent per taxonomy dimension and merge — add
   only if single-agent recall proves insufficient.
-- **Report-only, no fix loop.** No convergence / enumeration-creep machinery to port.
+- **Fix loop is main-loop + fresh re-review, capped at 3.** No fixer subagent, no
+  contract files — the report is the hand-off, and never-committed keeps rollback
+  trivial (`git checkout`). CRITICAL-only keeps the loop short; widen to IMPORTANT
+  only if leftovers prove chronic.
 - **No new CLI dependency.** Subagent over `codex`, so the skill installs anywhere.
 - **No on-disk state** beyond the `/tmp` report (audit trail), never committed —
   consistent with the rest of the plugin.

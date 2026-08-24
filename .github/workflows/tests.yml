@@ -1,0 +1,67 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # shellcheck gates the linear-groom-ticket suite. It is installed here on
+      # purpose rather than left to chance: the suite still runs without it, but
+      # it then reports that static analysis did NOT happen, and a green run
+      # that skipped its own static analysis is the kind of green worth
+      # refusing.
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          # Printed on purpose: SC2002 findings that this runner reports were
+          # invisible to a newer shellcheck locally, so "clean" is
+          # version-dependent and the version belongs in the log.
+          shellcheck --version
+
+      # The groom suite's offline validators require the jsonschema module.
+      # Until now this was satisfied by whatever
+      # ubuntu-latest happened to ship; pinning it makes the dependency explicit.
+      # A venv sidesteps PEP 668 (externally-managed-environment) on newer
+      # runner images.
+      - name: Install jsonschema
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install jsonschema
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/venv/bin/python" -c 'from importlib.metadata import version; print(version("jsonschema"))'
+
+      - name: Codex model/effort pins
+        run: bash tests/check-codex-knob.sh
+
+      # Pins the Linear MCP tool names used in skill prose so renamed writes do
+      # not fail silently.
+      - name: Linear MCP tool names
+        run: bash tests/check-linear-mcp-tools.sh
+
+      # No network, no tokens, no Linear workspace: the suite runs the offline
+      # scripts only — codex is replaced by a test double, and the Linear I/O is
+      # the agent's over the MCP, so there is nothing to fake. It forces
+      # CODEX_MODELS_CACHE at a path that does
+      # not exist, so the entitlement gate is skipped here — a runner has no
+      # ~/.codex, and the gate's own behaviour is covered against fixtures
+      # inside the suite.
+      #
+      # The second half of this step is not redundant. run.sh prints
+      # "shellcheck SKIPPED" and still exits 0 when the binary is missing, which
+      # is the right call on a laptop and the wrong one in CI: the run would
+      # pass having checked less than it claims. Asserting on the captured
+      # output costs nothing and closes that gap without running the suite twice.
+      - name: linear-groom-ticket offline suite
+        run: |
+          set -o pipefail
+          bash skills/linear-groom-ticket/scripts/tests/run.sh 2>&1 | tee suite.log
+          if grep -q 'shellcheck SKIPPED' suite.log; then
+            echo "::error::shellcheck did not run — the suite passed without static analysis"
+            exit 1
+          fi
