@@ -7,7 +7,7 @@ ok()   { printf '  ok   %s\n' "$1"; }
 fail() { printf '  FAIL %s\n' "$1"; FAILED=1; }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 export XDG_STATE_HOME="$TMP/state"
-RD="$TMP/state/linear-groom/MDZ-238"
+RD="$TMP/state/linear-groom/NBS-238"
 
 dim() { # dim <name> <verdict> <confidence> <stance> <evidence-json> [reason] [dup]
   cat >"$RD/wave1/$1.json" <<EOF
@@ -28,7 +28,7 @@ verdict() { python3 -c "import json;print(json.load(open('$1'))['verdict'])"; }
 blocked()  { python3 -c "import json;print(','.join(json.load(open('$1'))['safeguard']['blocked_by']))"; }
 
 run() {
-  python3 "$ROOT/scripts/40-synthesize.py" --ticket-id MDZ-238 \
+  python3 "$ROOT/scripts/40-synthesize.py" --ticket-id NBS-238 \
     --draft "$TMP/draft.md" --triage-label needs-triage --out "$1" 2>"$TMP/syn.err"
 }
 
@@ -112,13 +112,13 @@ sys.exit(0 if d['description_new'] is None and not d['labels_add'] else 1)
 # --- a duplicate produces the relation with the right type ---
 reset
 dim veracity    ok               high neutral "$NOEV"
-dim duplicates  delete-candidate high supports '[{"kind":"issue","ref":"MDZ-100","note":"same change"}]' '"duplicate"' '"MDZ-100"'
+dim duplicates  delete-candidate high supports '[{"kind":"issue","ref":"NBS-100","note":"same change"}]' '"duplicate"' '"NBS-100"'
 dim feasibility ok               high neutral "$NOEV"
 run "$TMP/p7.json"
 python3 -c "
 import json,sys
 d=json.load(open('$TMP/p7.json'))
-sys.exit(0 if d['relations']==[{'type':'duplicate-of','related':'MDZ-100'}] else 1)
+sys.exit(0 if d['relations']==[{'type':'duplicate-of','related':'NBS-100'}] else 1)
 " && ok "duplicate yields a duplicate-of relation" \
   || fail "relations: $(python3 -c "import json;print(json.load(open('$TMP/p7.json'))['relations'])")"
 
@@ -129,7 +129,7 @@ python3 "$ROOT/scripts/10-lint.py" --ticket "$RD/ticket.json" --out "$RD/gaps.js
 dim veracity    ok high opposes "$NOEV"
 dim duplicates  ok high neutral "$NOEV"
 dim feasibility ok high opposes "$NOEV"
-python3 "$ROOT/scripts/40-synthesize.py" --ticket-id MDZ-238 \
+python3 "$ROOT/scripts/40-synthesize.py" --ticket-id NBS-238 \
   --draft "$TMP/draft.md" --out "$TMP/p8.json" 2>/dev/null
 [ "$(verdict "$TMP/p8.json")" = "FIXABLE" ] \
   && ok "a missing required section alone yields FIXABLE" || fail "got $(verdict "$TMP/p8.json")"
@@ -137,7 +137,7 @@ python3 "$ROOT/scripts/40-synthesize.py" --ticket-id MDZ-238 \
 # --- two coherent proposers with different reasons: precedence picks 'duplicate' ---
 reset
 dim veracity    delete-candidate high supports "$EV" '"already-resolved"'
-dim duplicates  delete-candidate high supports '[{"kind":"issue","ref":"MDZ-77","note":"same change"}]' '"duplicate"' '"MDZ-77"'
+dim duplicates  delete-candidate high supports '[{"kind":"issue","ref":"NBS-77","note":"same change"}]' '"duplicate"' '"NBS-77"'
 dim feasibility ok               high neutral  "$NOEV"
 run "$TMP/p9.json" || fail "synthesize failed: $(cat "$TMP/syn.err")"
 [ "$(verdict "$TMP/p9.json")" = "DELETE-CANDIDATE" ] \
@@ -152,7 +152,7 @@ sys.exit(0 if d['reason']=='duplicate' else 1)
 python3 -c "
 import json,sys
 d=json.load(open('$TMP/p9.json'))
-sys.exit(0 if d['relations']==[{'type':'duplicate-of','related':'MDZ-77'}] else 1)
+sys.exit(0 if d['relations']==[{'type':'duplicate-of','related':'NBS-77'}] else 1)
 " && ok "the precedence-selected proposer's duplicate_of becomes the relation" \
   || fail "relations: $(python3 -c "import json;print(json.load(open('$TMP/p9.json'))['relations'])")"
 
@@ -168,7 +168,7 @@ sys.exit(0 if ok else 1)
 # --- 'duplicate' reason wins but duplicate_of is null: keep verdict, drop the relation, say so ---
 reset
 dim veracity    ok               high neutral  "$NOEV"
-dim duplicates  delete-candidate high supports '[{"kind":"issue","ref":"MDZ-1","note":"looks the same"}]' '"duplicate"'
+dim duplicates  delete-candidate high supports '[{"kind":"issue","ref":"NBS-1","note":"looks the same"}]' '"duplicate"'
 dim feasibility ok               high neutral  "$NOEV"
 run "$TMP/p10.json" || fail "synthesize failed: $(cat "$TMP/syn.err")"
 [ "$(verdict "$TMP/p10.json")" = "DELETE-CANDIDATE" ] \
@@ -203,7 +203,7 @@ case "$(blocked "$TMP/p11.json")" in *incoherent*) ok "names the incoherent self
 # no other proposer). ---
 reset
 dim veracity    delete-candidate high neutral  "$EV" '"already-resolved"'
-dim duplicates  delete-candidate high supports '[{"kind":"issue","ref":"MDZ-50","note":"dup"}]' '"duplicate"' '"MDZ-50"'
+dim duplicates  delete-candidate high supports '[{"kind":"issue","ref":"NBS-50","note":"dup"}]' '"duplicate"' '"NBS-50"'
 dim feasibility ok               high neutral  "$NOEV"
 run "$TMP/p12.json"
 [ "$(verdict "$TMP/p12.json")" = "FIXABLE" ] \
@@ -261,7 +261,7 @@ sys.exit(0 if d['unavailable_dimensions']==['feasibility'] else 1)
 # deletion was proposed (the reason and duplicate_of), not just that it was
 # blocked. ---
 reset
-dim veracity    delete-candidate high supports '[{"kind":"issue","ref":"MDZ-9","note":"same change"}]' '"duplicate"' '"MDZ-9"'
+dim veracity    delete-candidate high supports '[{"kind":"issue","ref":"NBS-9","note":"same change"}]' '"duplicate"' '"NBS-9"'
 dim duplicates  ok               high neutral "$NOEV"
 dim feasibility ok               high opposes "$NOEV"
 run "$TMP/p15.json"
@@ -271,7 +271,7 @@ run "$TMP/p15.json"
 python3 -c "
 import json,sys
 body=json.load(open('$TMP/p15.json'))['comments'][0]['body']
-sys.exit(0 if \"veracity proposed deletion for reason 'duplicate' (duplicate_of: MDZ-9)\" in body else 1)
+sys.exit(0 if \"veracity proposed deletion for reason 'duplicate' (duplicate_of: NBS-9)\" in body else 1)
 " && ok "the blocked single-proposer comment states the proposed reason and duplicate_of" \
   || fail "comment: $(python3 -c "import json;print(json.load(open('$TMP/p15.json'))['comments'][0]['body'])")"
 
@@ -279,7 +279,7 @@ sys.exit(0 if \"veracity proposed deletion for reason 'duplicate' (duplicate_of:
 # WOULD HAVE BEEN selected, not that it was, since plan.json's reason is null ---
 reset
 dim veracity    delete-candidate high supports "$EV" '"already-resolved"'
-dim duplicates  delete-candidate high supports '[{"kind":"issue","ref":"MDZ-5","note":"dup"}]' '"duplicate"' '"MDZ-5"'
+dim duplicates  delete-candidate high supports '[{"kind":"issue","ref":"NBS-5","note":"dup"}]' '"duplicate"' '"NBS-5"'
 dim feasibility ok               high opposes "$NOEV"
 run "$TMP/p16.json"
 [ "$(verdict "$TMP/p16.json")" = "FIXABLE" ] \
@@ -303,7 +303,7 @@ sys.exit(0 if '**veracity** — \`commit\` a1b2c3d' in body else 1)
 # --- Minor 6: when every dimension is unavailable, refuse (exit 1) and
 # write no plan file at all — the one non-zero exit in the script. ---
 reset
-python3 "$ROOT/scripts/40-synthesize.py" --ticket-id MDZ-238 \
+python3 "$ROOT/scripts/40-synthesize.py" --ticket-id NBS-238 \
   --draft "$TMP/draft.md" --triage-label needs-triage --out "$TMP/p17.json" 2>"$TMP/syn17.err"
 rc=$?
 [ "$rc" -eq 1 ] && ok "refuses with exit 1 when every dimension is unavailable" \

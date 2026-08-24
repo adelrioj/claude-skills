@@ -45,11 +45,11 @@ the tickets are healthy.
 tool.** `save_issue` takes `duplicateOf`, `blocks`, `blockedBy` and `relatedTo`
 (all append-only), so the relation write is available. The skill still defaults
 to a comment naming the canonical ticket and its URL, plus the triage label,
-because of the old pipeline's observed MDZ-243 side effect: Linear silently
+because of the old pipeline's observed side effect: Linear silently
 transitioned the issue on a `duplicate` relation add, absent from the activity
 log. The hazard is specific to that type — `duplicate-of` is also the only type
 `40-synthesize.py` ever plans, so it governs every relation the skill writes —
-and the non-duplicate types were verified state-safe on TRA-11 ⇄ MDZ-250
+and the non-duplicate types were verified state-safe on a cross-team pair
 (2026-08-20), where a `blocks` write moved neither ticket's `stateHistory`. A
 skill whose one promise is "never moves the state" cannot make that write by
 default. The comment is purely additive, so the skill changes a ticket's

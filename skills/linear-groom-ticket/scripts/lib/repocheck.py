@@ -73,19 +73,19 @@ def _name_hit(team_name, basename):
     - Multi-word names ("Data Platform") must appear IN FULL, in order, with
       any separators between the words: distinctive enough that finding the
       whole phrase in a repo name is real evidence.
-    - Single-word names ("Core", "Modernaize") must EQUAL the basename once
+    - Single-word names ("Core", "Nimbus") must EQUAL the basename once
       separators are collapsed. A one-word name embedded in a longer repo name
       carries no information — that is the `core-utils` case.
 
     Both directions were considered: rejecting a legitimate repo (say
-    `modernaize-backend`) only prompts the human, who has the other three
+    `nimbus-backend`) only prompts the human, who has the other three
     signals and `--skip-repo-check`. Accepting an unrelated one risks a
     ticket. The commit-subject signal remains the strong one.
 
     This makes the rule's strictness depend on how the team happened to be
     named, not on the strength of the evidence: a legitimate sibling repo like
-    `modernaize-sap-plugin` fails this signal for the one-word team
-    "Modernaize" (embedding isn't equality), while a multi-word team like
+    `nimbus-sap-plugin` fails this signal for the one-word team
+    "Nimbus" (embedding isn't equality), while a multi-word team like
     "Acme Data Platform" still matches `acme-data-platform`. This asymmetry is
     accepted deliberately, not an oversight — loosening the single-word case
     to allow embedding reopens the `core-utils` hole above, and tightening the

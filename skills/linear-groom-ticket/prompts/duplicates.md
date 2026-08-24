@@ -63,8 +63,8 @@ fence:
 
 {"dimension":"duplicates","verdict":"ok|needs-work|delete-candidate",
  "confidence":"low|medium|high","deletion_stance":"supports|neutral|opposes",
- "delete_reason":"duplicate|null","duplicate_of":"MDZ-99 or null",
+ "delete_reason":"duplicate|null","duplicate_of":"NBS-99 or null",
  "findings":[{"summary":"one line","detail":"which candidates and why"}],
- "evidence":[{"kind":"issue","ref":"MDZ-99","note":"same change would close both"}]}
+ "evidence":[{"kind":"issue","ref":"NBS-99","note":"same change would close both"}]}
 
 --- TICKET AND CANDIDATES ---

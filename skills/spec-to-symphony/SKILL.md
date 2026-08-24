@@ -153,7 +153,7 @@ No backlog state is resolved any more: nothing here creates a ticket, so there i
 
 Resolve the identifier, in order:
 
-- the identifier in the invocation (`/spec-to-symphony MDZ-123`)
+- the identifier in the invocation (`/spec-to-symphony NBS-123`)
 - the ticket the current worktree is about — its branch name, or its linked ticket
 - the `<IDENT>-` prefix on the spec filename from Step 2
 
@@ -179,7 +179,7 @@ Four checks on the Step 4 response. Each one catches a failure that is otherwise
    - **It is a different project** ⇒ this ticket belongs to a different deployment from the config you read in Step 1 — the spec would go onto a branch no poller watches, or worse, the wrong poller's. **STOP**, naming both projects. Never reassign a ticket out of one deployment into another to make this check pass.
    - **There is no project at all** ⇒ record it and continue; **Step 9 sets it, before the state, as part of arming.** Do not set it here — arming is one confirmed sequence, and a project written before Step 7's proof is a write the caller never approved.
 
-   **A missing project is worse than a wrong state, and it is worse silently.** Symphony's tracker filters `project` first and `state` second, so a ticket with no project matches the poller's query in *no* state: arming it changes nothing, nothing is dispatched, and nothing is logged — the orchestrator simply looks idle. This is not hypothetical: MDZ-249 came out of the spec leg with no project and needed manual repair before its first run could start. A state you can see on the ticket; an empty project field reads like a cosmetic omission right up until it costs a run.
+   **A missing project is worse than a wrong state, and it is worse silently.** Symphony's tracker filters `project` first and `state` second, so a ticket with no project matches the poller's query in *no* state: arming it changes nothing, nothing is dispatched, and nothing is logged — the orchestrator simply looks idle. This is not hypothetical: an observed ticket came out of the spec leg with no project and needed manual repair before its first run could start. A state you can see on the ticket; an empty project field reads like a cosmetic omission right up until it costs a run.
 3. **`branchName` is present.** It is the branch Step 7 pushes (lowercased by Linear). Absent ⇒ re-read; still absent ⇒ STOP rather than deriving your own.
 4. **Current state.** If it already equals the arming state from Step 3, **STOP and ask.** Either a poller already dispatched this ticket — in which case a stage has run *without* the spec on the branch and its output needs looking at before anything else — or someone moved it by hand. Re-arming an already-armed ticket is a no-op that reads as success. `/linear-spec-ticket` no longer transitions, so this is not the ordinary case.
 
@@ -199,14 +199,14 @@ Naming it what the stage computes is the deterministic fix — it makes the file
 **Show it and get a yes before committing to it:**
 
 ```
-The pipeline looks for:  docs/superpowers/specs/TRA-42-design.md
+The pipeline looks for:  docs/superpowers/specs/NBS-42-design.md
 Your spec is at:         docs/superpowers/specs/2026-08-17-retry-backoff-design.md
 
 Without this the Spec Review stage will not find your spec and will write its own
 from the ticket description.
 
   Step 7 commits it to the ticket branch as
-      docs/superpowers/specs/TRA-42-design.md
+      docs/superpowers/specs/NBS-42-design.md
   Your local file keeps its own name and is left alone.
 
 Land it under the pipeline's name? [y/N]
@@ -214,7 +214,7 @@ Land it under the pipeline's name? [y/N]
 
 If declined, continue — but say plainly in the final report that the pipeline will author a competing spec.
 
-Case matters when the convention matches a prefix: Linear's `branchName` is lowercased (`alejandrodelrio/tra-42-…`) while an `<IDENTIFIER>-*` remote match is uppercase. If the config derives its own branch name rather than using `issue.branch_name`, use the config's form, not Linear's.
+Case matters when the convention matches a prefix: Linear's `branchName` is lowercased (`dev/nbs-42-…`) while an `<IDENTIFIER>-*` remote match is uppercase. If the config derives its own branch name rather than using `issue.branch_name`, use the config's form, not Linear's.
 
 ## Step 7: Push the Ticket Branch
 
@@ -295,7 +295,7 @@ This starts the autonomous pipeline. Proceed? [y/N]
 On yes, **two writes, in this order, each on its own** — the project first, because the state is the one that arms:
 
 1. **Project, only if Step 5 found none.** `save_issue(id: "<IDENT>", project: "<project id from Step 3>")`, then read it back with `get_issue(id: "<IDENT>")` and confirm the project is the one you resolved. **Not the project you resolved, or still empty ⇒ STOP without touching the state.** An armed ticket outside the poller's project filter is the exact silent no-op this check exists to prevent, and the read-back is the only thing that catches a write the API accepted and dropped.
-2. **State.** `save_issue(id: "<IDENT>", state: "<arming state name>")` — the state and nothing else, no `description`, no `patch` and no `project` in the same call. Then read it back too: **the state that comes back must equal `active_states[0]` exactly.** A `save_issue` that returns without error is not proof the field moved; MDZ-249 was reported as transitioned while sitting in `To Do`.
+2. **State.** `save_issue(id: "<IDENT>", state: "<arming state name>")` — the state and nothing else, no `description`, no `patch` and no `project` in the same call. Then read it back too: **the state that comes back must equal `active_states[0]` exactly.** A `save_issue` that returns without error is not proof the field moved; an observed run reported a ticket as transitioned while it sat in `To Do`.
 
 Never fold the two into one call. The project write is a repair; the state write arms an autonomous pipeline. Kept separate, a failed project write leaves the ticket exactly where it was — parked, visible, and safe to retry.
 
@@ -356,7 +356,7 @@ Step 7 exists partly to satisfy this: cutting the ticket branch from `origin/<de
 - "There's no ticket for this yet, I'll just create one" — that is a duplicate waiting to happen. `/to-linear`, then `/linear-groom-ticket`, then come back
 - "The ticket has no project, but the state is what the poller filters on" — it filters `project` first. No project means no match in any state, and nothing anywhere says so
 - "I'll set the project in Step 5 while I'm reading the ticket" — arming is one confirmed sequence; a write before Step 7's proof is one the caller never approved
-- "`save_issue` returned without an error, so the ticket moved" — read it back. A ticket reported as armed and actually sitting in `To Do` is what MDZ-249 did
+- "`save_issue` returned without an error, so the ticket moved" — read it back. A ticket reported as armed while actually sitting in `To Do` is what an observed run produced
 - "The ticket is already in the arming state, so this is already done" — it means a stage may have run with no spec on the branch. Look at what it produced before touching anything
 - "The description is thin, I'll rewrite it properly while I'm here" — it is a groomed template artifact. Append the spec-path line, nothing more
 - "The spec isn't committed, so I can't push it" — Step 7 commits it onto the ticket branch. `/linear-spec-ticket` leaves it uncommitted on purpose

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Self-check for the Linear MCP tool names the skills tell the agent to call.
 #
-# TRA-11: four skills instructed the agent to call `create_issue`, `update_issue`,
+# An audit pass found four skills instructing the agent to call `create_issue`, `update_issue`,
 # `create_comment` and `create_project` long after the server collapsed that family
 # into `save_*`. A skill naming a tool the server does not expose is a skill whose
 # writes silently do not happen — so pin the contract the way tests/check-codex-knob.sh

@@ -108,7 +108,7 @@ The durable homes are deliberately narrow:
 
 Adding `## Triage` to `skills/to-linear/templates/story.md` is forbidden. The
 file is shared by `/to-linear` and `10-lint.py`; changing it would make every
-existing MDZ ticket report a new missing required section on its next grooming.
+ticket already filed against the template report a new missing required section on its next grooming.
 The shared template is not the place to add an optional triage payload.
 
 The comment is MCP-only because only `save_comment` accepts a comment id and
@@ -161,9 +161,9 @@ Written down rather than hidden. None blocks the ticket; all are real.
 
 5. **The skill behaves differently on two machines.** With `orca`, the estimate is written and proved; without it, it lives in the comment. Stated at the gate so it is never a surprise, but it is real variance in what the skill does.
 
-6. **Cross-repo tickets need the right `cd`.** MDZ spans two repos and the skill cannot pick one for you; it can only make you confirm the one you are standing in. `--repo` is deferred.
+6. **Cross-repo tickets need the right `cd`.** A team whose work spans two repos gives the skill no way to pick one for you; it can only make you confirm the one you are standing in. `--repo` is deferred.
 
-7. **A triage goes stale invisibly.** MDZ-243 changed workflow state with no activity-log entry at all. The provenance stamp (D12) lets a reader *notice* staleness; nothing detects it, and nothing expires a triage.
+7. **A triage goes stale invisibly.** An observed ticket changed workflow state with no activity-log entry at all. The provenance stamp (D12) lets a reader *notice* staleness; nothing detects it, and nothing expires a triage.
 
 8. **No offline tests of the Linear-facing behaviour.** `tests/check-codex-knob.sh` pins the skill's textual contracts, compiles both embedded Python blocks, and exercises the watchdog's timeout and exit-passthrough for real — but like `/linear-spec-ticket`, nothing that touches Linear can be exercised without a live workspace. The failure-modes table, the FORBIDDEN list and the live runs in the DoD are what stand in for a suite — a real loss, not a simplification.
 

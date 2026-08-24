@@ -4,17 +4,17 @@
   "result": {
     "issue": {
       "id": "aaaa",
-      "identifier": "MDZ-999",
+      "identifier": "NBS-999",
       "title": "Arreglar el bug",
       "description": "## User Story\n\n## Context\n\nSomething is wrong with the parser.\n\n## Scope\n\nFix it.\n",
       "team": {
         "id": "t1",
-        "name": "Modernaize",
-        "key": "MDZ"
+        "name": "Nimbus",
+        "key": "NBS"
       },
       "labels": [],
-      "branchName": "vsimon/mdz-999-arreglar-el-bug",
-      "url": "https://linear.app/trazadera/issue/MDZ-999/x"
+      "branchName": "dev/nbs-999-arreglar-el-bug",
+      "url": "https://linear.app/acme/issue/NBS-999/x"
     },
     "comments": [],
     "children": [],

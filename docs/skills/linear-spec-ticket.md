@@ -70,7 +70,7 @@ behaviour.** Revisions 2 and 3 justified the ban with *"the pipeline cannot see
 the spec"*; that justification is now deployment-specific, and the ban is not.
 What holds everywhere is that arming is a single confirmed sequence which also
 has to set the ticket's project — Symphony filters `project` before `state`, so a
-ticket armed without one is dispatched in **no** state, silently (MDZ-249). That
+ticket armed without one is dispatched in **no** state, silently — observed. That
 sequence lives in `/spec-to-symphony` Step 9, behind `git ls-tree` proof. A
 transition from here would skip the project check and arm an autonomous run from
 behind a gate whose text promises it arms nothing.
@@ -172,7 +172,7 @@ The bundled Linear remote MCP has no attachment-upload tool — no `fileUpload`,
 
 ### Revision 5: back to the MCP, because it grew the tool
 
-TRA-11 found four skills still calling the retired create/update tools by name after Linear collapsed that family into `save_*`, and three "the MCP cannot do X" premises that had gone stale underneath their workarounds. This skill's whole transport was one of them: `prepare_attachment_upload` → signed `PUT` → `create_attachment_from_upload` is the same three-step burst Revision 3 hand-rolled, and `delete_attachment` retires the old copy, so the API key was buying nothing but a second credential.
+An audit pass found four skills still calling the retired create/update tools by name after Linear collapsed that family into `save_*`, and three "the MCP cannot do X" premises that had gone stale underneath their workarounds. This skill's whole transport was one of them: `prepare_attachment_upload` → signed `PUT` → `create_attachment_from_upload` is the same three-step burst Revision 3 hand-rolled, and `delete_attachment` retires the old copy, so the API key was buying nothing but a second credential.
 
 What the migration deleted: `LINEAR_API_KEY` and its preflight, four GraphQL mutations and two queries, the `Authorization`-header convention, the `errors`-array-with-HTTP-200 caveat, the issue-UUID plumbing (both MCP tools take the identifier), and the FORBIDDEN entry that read *"never fall back to the Linear MCP"*. What it kept unchanged: both gates, the uninterrupted burst, the verbatim signed headers, the byte-exact `wc -c` size, prove-before-retire, and no state transition.
 
@@ -207,6 +207,6 @@ The full list is in the spec. The ones that matter most to anyone changing this 
 
 ## Deviation from the ticket's DoD, recorded deliberately
 
-MDZ-246 asks for both state names to be resolved *"desde la configuración de deployment de Symphony"*. The intent — do not hardcode state names — is met, and met better: they are resolved against the team's own workflow states, which is authoritative where the config is not.
+The originating ticket asked for both state names to be resolved *"desde la configuración de deployment de Symphony"*. The intent — do not hardcode state names — is met, and met better: they are resolved against the team's own workflow states, which is authoritative where the config is not.
 
-The config does not even list `To Do`, and MDZ's deployed states (`Ready for Planning`, `Ready for Development`, `Ready for PR Review`) already diverge from the template's (`Spec Reviewed`, `Implemented`). When the hardened spec is mirrored back to the ticket, that DoD line is rewritten to "resolved at runtime against the team's workflow states".
+The config does not even list `To Do`, and a real deployment's states (`Ready for Planning`, `Ready for Development`, `Ready for PR Review`) already diverged from the template's (`Spec Reviewed`, `Implemented`). When the hardened spec is mirrored back to the ticket, that DoD line is rewritten to "resolved at runtime against the team's workflow states".

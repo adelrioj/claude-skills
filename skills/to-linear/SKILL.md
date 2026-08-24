@@ -93,12 +93,12 @@ ticket into the wrong company's tracker — which no read-back after the fact un
 
 **Team** varies per repo. Resolve in this order and stop at the first hit:
 
-1. **The invocation says so** — "file this on TRA", or a pasted issue/project URL. Explicit wins.
+1. **The invocation says so** — "file this on NBS", or a pasted issue/project URL. Explicit wins.
 2. **`$LINEAR_TEAM`** — `printenv LINEAR_TEAM`. This is the per-checkout pin; repos set it in
-   `.envrc` (`export LINEAR_TEAM=MDZ`).
+   `.envrc` (`export LINEAR_TEAM=NBS`).
 3. **The repo's own docs** — the ticket-key convention is usually written down:
    `grep -rEn '\b[A-Z]{2,6}-[0-9]+\b|linear\.app' CLAUDE.md AGENTS.md README.md .claude/ docs/ 2>/dev/null | head -30`.
-   A branch rule like `MDZ-123-short-description` names the key outright. Recent branches work
+   A branch rule like `NBS-123-short-description` names the key outright. Recent branches work
    too: `git branch -a --format='%(refname:short)' | grep -oE '[A-Z]{2,6}-[0-9]+' | sort -u`.
 4. **Ask** — `list_teams`. Exactly one team ⇒ use it. Several ⇒ ask which, showing the keys.
    Do not pick the alphabetically-first one, and do not assume the company-wide team is the
@@ -147,7 +147,7 @@ Rules:
 - If a field is not configured on the team (estimates and cycles are off for some), leave it
   alone rather than trying to set it.
 
-Return the issue URL and identifier (e.g. `MDZ-231`) from the response.
+Return the issue URL and identifier (e.g. `NBS-231`) from the response.
 
 ## Step 4: Filing an epic (a project)
 

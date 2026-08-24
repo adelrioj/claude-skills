@@ -36,7 +36,7 @@ fence, no explanation before or after:
  "delete_reason":"duplicate|already-resolved|obsolete|unactionable|null",
  "duplicate_of":null,
  "findings":[{"summary":"one line","detail":"what you checked and found"}],
- "evidence":[{"kind":"commit|file|issue","ref":"a1b2c3d or path:line or MDZ-99",
+ "evidence":[{"kind":"commit|file|issue","ref":"a1b2c3d or path:line or NBS-99",
               "note":"why this proves the point"}]}
 
 Use `verdict: "ok"` when the ticket's claims hold and it is worth doing.

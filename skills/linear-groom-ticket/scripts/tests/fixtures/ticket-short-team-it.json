@@ -10,7 +10,7 @@
       "team": { "id": "t3", "name": "Iota", "key": "IT" },
       "labels": [],
       "branchName": "someone/it-7-fixture",
-      "url": "https://linear.app/trazadera/issue/IT-7/x"
+      "url": "https://linear.app/acme/issue/IT-7/x"
     },
     "comments": [],
     "children": [],

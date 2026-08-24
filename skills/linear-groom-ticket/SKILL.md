@@ -1,6 +1,6 @@
 ---
 name: linear-groom-ticket
-description: "Use when a Linear ticket needs to be made ready to work on, or judged not worth working on. Analyses one ticket across four dimensions — whether its claims hold in the code, whether it is complete against the team template, whether it duplicates another ticket, and whether it is implementable — then proposes a corrected description and applies it to Linear only after you approve. Triggers on: groom this ticket, prepare MDZ-123, is this ticket ready, revisa este ticket, ¿este ticket está listo?, deja el ticket listo para trabajar, candidato a borrar, dedupe this ticket."
+description: "Use when a Linear ticket needs to be made ready to work on, or judged not worth working on. Analyses one ticket across four dimensions — whether its claims hold in the code, whether it is complete against the team template, whether it duplicates another ticket, and whether it is implementable — then proposes a corrected description and applies it to Linear only after you approve. Triggers on: groom this ticket, prepare NBS-123, is this ticket ready, revisa este ticket, ¿este ticket está listo?, deja el ticket listo para trabajar, candidato a borrar, dedupe this ticket."
 user-invocable: true
 ---
 
@@ -28,7 +28,7 @@ MCP *can* write the relation: `save_issue` takes `duplicateOf`, `blocks`,
 duplicate as a comment naming the canonical ticket and its URL, plus the triage
 label, and the reason is specific to `duplicateOf`: **that write was observed to
 move the ticket's state on its own**, when the removed local pipeline's
-`relation add` silently transitioned MDZ-243 into a `Duplicate`-type state with
+`relation add` silently transitioned an observed ticket into a `Duplicate`-type state with
 nothing in the activity log. Linear has a `Duplicate` state and no other
 relation type has one to move to. That collides with the one promise this skill
 makes — it never changes a ticket's workflow state — so the comment keeps the
@@ -37,7 +37,7 @@ promise true.
 `duplicate-of` is also the **only** relation type `40-synthesize.py` ever puts in
 a plan, so in practice this policy governs every relation the skill writes. The
 non-duplicate types were checked and are state-safe: a `blocks` write on
-TRA-11 ⇄ MDZ-250 (2026-08-20) added the relation on both sides and left both
+A verified cross-team pair (2026-08-20) added the relation on both sides and left both
 tickets' `stateHistory` untouched.
 
 The native relation is therefore **opt-in, not unavailable**: if the caller
@@ -80,7 +80,7 @@ analysis. If the plan is wrong, fix the input and re-run `40-synthesize.py`.
 
 ## Steps
 
-Let `$T` be the ticket **identifier** (like `MDZ-238`) — if you were handed a
+Let `$T` be the ticket **identifier** (like `NBS-238`) — if you were handed a
 Linear URL, resolve it to the identifier first, because it names the run
 directory. Resolve this skill's directory into `$S`; every step below uses it:
 
@@ -115,10 +115,10 @@ Then, through the Linear MCP:
   ```json
   {"result": {
     "issue": {
-      "identifier": "MDZ-238",
+      "identifier": "NBS-238",
       "title": "…",
       "description": "…markdown…",
-      "team": {"key": "MDZ", "name": "Modernaize"},
+      "team": {"key": "NBS", "name": "Nimbus"},
       "state": {"name": "To Do", "type": "unstarted"},
       "labels": [{"name": "Story"}],
       "url": "https://linear.app/…"
@@ -353,7 +353,7 @@ Show the user, in this order:
    relation, **a comment naming the canonical ticket plus the triage label
    rather than a native relation**. Say why that last one is a comment: the
    relation write is available (`save_issue(duplicateOf:)`) but was seen to
-   transition MDZ-243's state by itself, and this skill promises not to move
+   transition a ticket's state by itself, and this skill promises not to move
    state. Offer the native relation as an explicit opt-in. Say that all of
    these are additive, that the snapshot makes the description overwrite
    reversible by hand, and that **nothing here changes the ticket's workflow
@@ -408,7 +408,7 @@ unapproved write like any other. Then add it via `save_issue(id: "$T", labels:
 one-line statement of the relationship. `save_issue` *can* write the real
 relation (`duplicateOf`, `blocks`, `blockedBy`, `relatedTo`, all append-only),
 and the comment is a deliberate policy rather than a missing tool: a
-`duplicateOf` write was observed to transition MDZ-243's state with no
+`duplicateOf` write was observed to transition a ticket's state with no
 activity-log entry, and this skill promises not to move state. Since
 `duplicate-of` is the only type a plan ever carries, that covers every relation
 this skill would write. Tell the user in the report that it was recorded as a

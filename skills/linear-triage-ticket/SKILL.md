@@ -1,6 +1,6 @@
 ---
 name: linear-triage-ticket
-description: 'Use when a Linear ticket needs a priority, a complexity rating and an effort estimate backed by evidence from the code — reads the repo the ticket is about, runs two read-only codex analysts, and after your explicit approval writes the priority, the estimate (when provable) and one living rationale comment to Linear. Triggers on: triage this ticket, size MDZ-123, prioritize this ticket, estimate this ticket, how big is this ticket, how urgent is this, triaje este ticket, prioriza el ticket, estima el esfuerzo, linear-triage-ticket.'
+description: 'Use when a Linear ticket needs a priority, a complexity rating and an effort estimate backed by evidence from the code — reads the repo the ticket is about, runs two read-only codex analysts, and after your explicit approval writes the priority, the estimate (when provable) and one living rationale comment to Linear. Triggers on: triage this ticket, size NBS-123, prioritize this ticket, estimate this ticket, how big is this ticket, how urgent is this, triaje este ticket, prioriza el ticket, estima el esfuerzo, linear-triage-ticket.'
 user-invocable: true
 ---
 
@@ -83,7 +83,7 @@ The scale is **inverted** (higher number, lower urgency). `0` is “No priority�
 
 ## The approach
 
-Invocation: `/linear-triage-ticket <MDZ-123>`, or with no argument from a worktree whose branch names a ticket. No-argument resolution reads `git branch --show-current`; empty output (detached HEAD) means STOP and ask for an identifier. Extract case-insensitive tokens matching `[A-Z][A-Z0-9]+-[0-9]+` and normalise them to uppercase. Exactly one distinct token is `<IDENT>`; zero or more than one means STOP and ask.
+Invocation: `/linear-triage-ticket <NBS-123>`, or with no argument from a worktree whose branch names a ticket. No-argument resolution reads `git branch --show-current`; empty output (detached HEAD) means STOP and ask for an identifier. Extract case-insensitive tokens matching `[A-Z][A-Z0-9]+-[0-9]+` and normalise them to uppercase. Exactly one distinct token is `<IDENT>`; zero or more than one means STOP and ask.
 
 ### Step 0 — Preflight
 
@@ -525,15 +525,15 @@ Could not verify: <claim -> why>
 | Ticket edited, moved, or resolved differently between the gate and the write | Step 6 staleness recheck: compare fresh `id`, `identifier`, URL, team, analyst inputs, priority, marker comment, and estimate; repeat MCP/`orca` UUID-plus-URL identity | **Abort with nothing written, re-present the gate** on any change or mismatch. The recheck→write window remains a last-write-wins race (Known gaps). |
 | C5 complexity | sizing analyst returns C5 | Effort is *unavailable pending spike*; no estimate write; the spike is the recorded main risk / next action. |
 | An analyst unavailable after retry | D11 ownership map | Its owned values are `Unavailable`, their native writes are skipped, the gate and comment say so, confidence drops. Values are never invented. (Contamination is the exception — it STOPs, see below.) |
-| Someone adds `## Triage` to `story.md` | — | Never do it: every existing MDZ ticket would report a new missing section on its next grooming. |
-| `save_issue` sent with `labels` | — | Forbidden. `labels` replaces the whole set; MDZ-221 carries eight. |
+| Someone adds `## Triage` to `story.md` | — | Never do it: every ticket already filed against the template would report a new missing section on its next grooming. |
+| `save_issue` sent with `labels` | — | Forbidden. `labels` replaces the whole set, and a real ticket routinely carries half a dozen or more. |
 
 ## FORBIDDEN
 
 - Reporting “estimate applied” on the strength of a write call returning success — the read-back is the only proof.
 - Outputting priority `0`, or effort `0`.
 - A priority of `3` without both anti-Medium sentences.
-- Calling `save_issue` with anything besides `priority` — `labels` especially (it replaces the full set; MDZ-221 carries eight).
+- Calling `save_issue` with anything besides `priority` — `labels` especially (it replaces the full set, and a real ticket routinely carries half a dozen or more).
 - Writing the triage into the description, or adding a `## Triage` section to `skills/to-linear/templates/story.md`.
 - Inventing a value an analyst did not produce.
 - Using `orca` for reads, the priority, or the comment; using `orca --current` instead of the explicit identifier + `--workspace`.

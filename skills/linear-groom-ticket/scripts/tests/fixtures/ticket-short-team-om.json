@@ -10,7 +10,7 @@
       "team": { "id": "t2", "name": "Omega", "key": "OM" },
       "labels": [],
       "branchName": "someone/om-12-fixture",
-      "url": "https://linear.app/trazadera/issue/OM-12/x"
+      "url": "https://linear.app/acme/issue/OM-12/x"
     },
     "comments": [],
     "children": [],

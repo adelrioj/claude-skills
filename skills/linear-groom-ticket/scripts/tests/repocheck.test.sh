@@ -12,12 +12,12 @@ fail() { printf '  FAIL %s\n' "$1"; FAILED=1; }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 # --- basename match ---
-mkdir -p "$TMP/modernaize" && (cd "$TMP/modernaize" && git init -q)
+mkdir -p "$TMP/nimbus" && (cd "$TMP/nimbus" && git init -q)
 python3 "$ROOT/scripts/lib/repocheck.py" \
-  --ticket "$HERE/fixtures/ticket-complete.json" --repo "$TMP/modernaize" >"$TMP/rc1.json"
+  --ticket "$HERE/fixtures/ticket-complete.json" --repo "$TMP/nimbus" >"$TMP/rc1.json"
 rc=$?
 [ "$rc" -eq 0 ] && ok "repocheck matches team name against repo basename" \
-  || fail "repocheck exit $rc for modernaize/MDZ"
+  || fail "repocheck exit $rc for nimbus/NBS"
 
 # --- clear mismatch ---
 mkdir -p "$TMP/unrelated-thing" && (cd "$TMP/unrelated-thing" && git init -q)
@@ -31,11 +31,11 @@ grep -q '"matched": false' "$TMP/rc2.json" \
 # --- commit-subject signal ---
 mkdir -p "$TMP/whatever" && (
   cd "$TMP/whatever" && git init -q \
-    && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m "MDZ-238 do a thing"
+    && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m "NBS-238 do a thing"
 )
 python3 "$ROOT/scripts/lib/repocheck.py" \
   --ticket "$HERE/fixtures/ticket-complete.json" --repo "$TMP/whatever" >/dev/null
-[ $? -eq 0 ] && ok "repocheck matches MDZ-nnn tokens in commit subjects" \
+[ $? -eq 0 ] && ok "repocheck matches NBS-nnn tokens in commit subjects" \
   || fail "commit-subject signal did not fire"
 
 # --- short team key must not false-match via the origin hostname ---

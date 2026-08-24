@@ -13,7 +13,7 @@ moves are out of scope. Drives the **Linear MCP**, the transport every Linear sk
   read back and confirmed (`$LINEAR_WORKSPACE` as an optional STOP-guard for checkouts that must
   only ever file into one place), never selected. Team *is* selectable, and resolves as
   invocation → `$LINEAR_TEAM` → repo docs/branch grep for `KEY-123` → `list_teams` + ask. `.envrc`
-  (`export LINEAR_TEAM=MDZ`, `export LINEAR_WORKSPACE=…`) is the pin a repo carries; the grep is the
+  (`export LINEAR_TEAM=NBS`, `export LINEAR_WORKSPACE=…`) is the pin a repo carries; the grep is the
   fallback for repos that only document the convention in `CLAUDE.md`/git rules. Both are named in
   the pre-filing summary. Never auto-pick when several teams match — a workspace commonly carries a
   company-wide team alongside the engineering ones, and filing there puts the ticket in front of the
@@ -37,7 +37,7 @@ moves are out of scope. Drives the **Linear MCP**, the transport every Linear sk
   that is what Linear descriptions accept. Every section the template defines stays, with an honest
   `TBD — …` placeholder where information is missing rather than invented detail. They were
   neutralized on import: `File.java` → `path/to/file.ext`, Flyway/TIL-spec examples → generic
-  migration/contract wording, `team MDZ` → the resolved team
+  migration/contract wording, `team NBS` → the resolved team
 - **Titles are short because Linear derives `branchName` from them**, and the identifier in that
   branch is what links the PR back — a merged linked PR is what closes the issue. `priority` is set
   only when severity is clear from the conversation; unconfigured fields (estimates, cycles are off

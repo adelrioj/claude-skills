@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-30 · **Status:** approved, ready to implement
 **Origin:** `/tmp/handoff-shipit-contract-mechanism-2026-07-30.md`, written from a completed
-`/ship-it` run on `modernaize` (MDZ-123) in which **5 of 5 step subagents finished their work
+`/ship-it` run on `nimbus` (NBS-123) in which **5 of 5 step subagents finished their work
 and returned no contract**.
 
 ---
@@ -10,7 +10,7 @@ and returned no contract**.
 ## Problem
 
 `ship-it` dispatches subagents for Steps 1, 2, 4 and 6 and requires each to return a
-three-field contract (`outcome` / `state` / `notes`). In the MDZ-123 run every one of them,
+three-field contract (`outcome` / `state` / `notes`). In the NBS-123 run every one of them,
 plus the Step 7 architect reviewer, ended with a bare
 `{"type":"idle_notification","idleReason":"available"}` and no report.
 
@@ -27,7 +27,7 @@ Three properties make this worse than a flake:
    Everything else was reconstructed by the conductor from git and direct gate runs.
 
 Nothing was lost in that run only because the conductor distrusted the mechanism and verified
-independently. This is a **recurrence** — the prior MDZ-120 run lost 4 of 5 contracts; it has
+independently. This is a **recurrence** — the prior NBS-120 run lost 4 of 5 contracts; it has
 gone 4/5 → 5/5 with the mitigation already known.
 
 ### Root cause
@@ -41,9 +41,9 @@ channel and gets nothing.
 
 - `architect-review-pr` Step 3: *"Write the subagent's returned markdown to
   `/tmp/architect-review-pr-$(date +%s).md`"*. The conductor can only write a file it received,
-  so a lost report **does not exist at all**. Worse, in the MDZ-123 run the only
+  so a lost report **does not exist at all**. Worse, in the NBS-123 run the only
   `/tmp/architect-review-pr-*.md` on disk was from a **previous session for a different
-  ticket** (Jul 29, mdz-121-122) — a conductor globbing that pattern silently adopts a stale
+  ticket** (Jul 29, nbs-121-122) — a conductor globbing that pattern silently adopts a stale
   report for the wrong feature and presents it as this run's findings.
 - `blind-spot` Step 2 carries the identical construction.
 
@@ -120,7 +120,7 @@ summary"* rule to every step.
 | 1 spec | a **`/tmp/`**`spec-review-findings-*` file whose mtime ≥ the dispatch timestamp |
 | 2 plan | `test -f <plan-path>`; on a lost contract, newest `docs/superpowers/plans/*.md` with mtime ≥ dispatch |
 | 4 execute | `git status --porcelain` non-empty **or** `HEAD` moved off the pre-dispatch SHA |
-| 6 review | `git status --porcelain` non-empty ⇒ fixes were applied *(this is what actually drove the MDZ-123 loop)* |
+| 6 review | `git status --porcelain` non-empty ⇒ fixes were applied *(this is what actually drove the NBS-123 loop)* |
 | 7 architect | `test -f $RUN_DIR/architect-review.md` |
 
 Two rules govern predicate design, both found by self-review after the first draft:
@@ -174,7 +174,7 @@ the conductor's context.
 - **`TaskOutput` polling or re-dispatch.** The work completed every time; only reporting failed.
 - **Weakening the anti-yield guard.** It is correct and load-bearing — Step 4's poll-to-completion
   rule is why the work landed at all.
-- **The `bin/checkstyle-local.sh` false-green** found during the run — a *modernaize* issue,
+- **The `bin/checkstyle-local.sh` false-green** found during the run — a *nimbus* issue,
   recorded separately.
 
 ## Scope of the change

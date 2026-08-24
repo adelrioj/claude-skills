@@ -1,6 +1,6 @@
 ---
 name: linear-spec-ticket
-description: 'Use when a Linear ticket has been groomed and now needs a design spec written onto it so work can start — drafts the spec from the ticket and the codebase and uploads it to the ticket as a file attachment. Also refreshes that attachment after /spec-review-codex hardens the spec. Never changes the ticket state. Triggers on: add a spec to this ticket, write the spec for MDZ-123, deja el ticket listo para trabajar, añade spec al ticket, adjunta la spec al ticket, prepare this ticket for work, spec this ticket, refresh the spec attachment, re-upload the hardened spec, linear-spec-ticket.'
+description: 'Use when a Linear ticket has been groomed and now needs a design spec written onto it so work can start — drafts the spec from the ticket and the codebase and uploads it to the ticket as a file attachment. Also refreshes that attachment after /spec-review-codex hardens the spec. Never changes the ticket state. Triggers on: add a spec to this ticket, write the spec for NBS-123, deja el ticket listo para trabajar, añade spec al ticket, adjunta la spec al ticket, prepare this ticket for work, spec this ticket, refresh the spec attachment, re-upload the hardened spec, linear-spec-ticket.'
 user-invocable: true
 ---
 
@@ -23,7 +23,7 @@ Close the gap between *"ticket groomed"* and *"ticket with a reviewable spec"*: 
 
 **The transport is the Linear MCP — the same server every sibling skill uses.** Every Linear read and write here is an MCP tool call (`get_issue`, `list_issue_statuses`, `prepare_attachment_upload`, `create_attachment_from_upload`, `delete_attachment`); load them with ToolSearch if they are deferred. The one thing that is *not* a tool call is the signed `PUT` of the spec's bytes, because no tool ships bytes — that stays a `curl`. There is **no** `orca` command here and **no** hand-rolled GraphQL; both were transports of earlier revisions and both were removed by decision.
 
-**Why the MCP, since it used to be GraphQL.** Revision 3 moved this skill onto Linear's GraphQL API with a personal `LINEAR_API_KEY` for one reason: the MCP had no attachment-upload tool. It has one now — `prepare_attachment_upload` → signed `PUT` → `create_attachment_from_upload` is the identical three-step burst, and `delete_attachment` retires the old copy. So the API key bought nothing except a second credential that could bind to a different workspace than the OAuth session. TRA-11 removed it. **One credential, one workspace binding, shared with every sibling skill** — and if a future Linear release drops attachment upload from the MCP again, that is a decision to re-open, not a reason to quietly hand-roll GraphQL mid-run.
+**Why the MCP, since it used to be GraphQL.** Revision 3 moved this skill onto Linear's GraphQL API with a personal `LINEAR_API_KEY` for one reason: the MCP had no attachment-upload tool. It has one now — `prepare_attachment_upload` → signed `PUT` → `create_attachment_from_upload` is the identical three-step burst, and `delete_attachment` retires the old copy. So the API key bought nothing except a second credential that could bind to a different workspace than the OAuth session. A later revision removed it. **One credential, one workspace binding, shared with every sibling skill** — and if a future Linear release drops attachment upload from the MCP again, that is a decision to re-open, not a reason to quietly hand-roll GraphQL mid-run.
 
 **One channel: a file attachment.** The spec is uploaded to the ticket as `<IDENT>-design.md`. The ticket's `description` is never touched, its state is never touched, nothing is committed, nothing is pushed, and no snapshot comment is posted. A local copy at `docs/superpowers/specs/<IDENT>-design.md` is left behind, uncommitted, and three things read it: the upload needs bytes on disk, `/spec-review-codex` reviews a file rather than an attachment, and `/spec-to-symphony` is what eventually commits and pushes it. **This skill still makes no git writes** — it leaves the file where the next leg expects to find it.
 
@@ -109,7 +109,7 @@ get_issue(id: "<IDENT>")                     -> identifier, title, url, descript
 list_issue_statuses(team: "<team from get_issue>")   -> the team's workflow states
 ```
 
-`get_issue`'s `id` accepts the human identifier (`MDZ-123`) directly. **No issue UUID is needed anywhere in this skill** — `prepare_attachment_upload` takes the identifier too, which is one fewer thing to carry through the burst than the GraphQL revision needed.
+`get_issue`'s `id` accepts the human identifier (`NBS-123`) directly. **No issue UUID is needed anywhere in this skill** — `prepare_attachment_upload` takes the identifier too, which is one fewer thing to carry through the burst than the GraphQL revision needed.
 
 - **`get_issue` errors or returns nothing ⇒ STOP.** Nothing else in this skill is safe without it.
 - **The returned `identifier` must equal the one you asked for.** The session binds to one workspace and you can neither select nor assert it. This read-back is the only check that you are writing where you think you are — a ticket in another workspace simply does not resolve.
@@ -353,7 +353,7 @@ If `command -v codex` fails, add one line saying that next step needs `codex` on
 - "I'll add a `Content-Length` header to be safe" — the header set is signed as returned; adding one returns 403
 - "I'll put `Authorization` on the PUT too" — the PUT goes to a signed storage URL, not the API. There is no key to send anyway, and an extra header breaks the signature
 - "`wc -m` gives me the size" — it gives characters, not bytes. Any accent makes the two differ and the signed range is exact on both bounds, so the `PUT` returns 403
-- "`orca` or a raw GraphQL call would be easier here" — the MCP carries the whole burst, and it is the transport by decision (TRA-11). A tool that is missing is a STOP naming it, not a second wire
+- "`orca` or a raw GraphQL call would be easier here" — the MCP carries the whole burst, and it is the transport by decision. A tool that is missing is a STOP naming it, not a second wire
 - "There's already a spec attachment, I'll just upload the new one alongside" — two specs, and no reader can tell which is current
 - "There's already a spec attachment, so this ticket is done" — an attachment holds *its own run's* spec. Its presence means decide (Step 1.3), not done
 - "Symphony might not see the attachment, so I'll also push the spec / also write the description" — a second channel here is the removed revision, whichever way the deployment reads. `/spec-to-symphony` owns the push, and it is the next step, not a gap to patch here

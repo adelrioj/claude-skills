@@ -18,8 +18,8 @@ export XDG_STATE_HOME="$TMP/state"
 . "$ROOT/scripts/lib/common.sh"
 
 # --- run_dir ---
-got="$(run_dir MDZ-238)"
-want="$TMP/state/linear-groom/MDZ-238"
+got="$(run_dir NBS-238)"
+want="$TMP/state/linear-groom/NBS-238"
 [ "$got" = "$want" ] && ok "run_dir honours XDG_STATE_HOME" \
   || fail "run_dir: got '$got' want '$want'"
 
