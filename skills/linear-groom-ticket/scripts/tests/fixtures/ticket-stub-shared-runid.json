@@ -1,0 +1,22 @@
+{
+  "id": "x",
+  "ok": true,
+  "result": {
+    "issue": {
+      "id": "issue-mdz-243",
+      "identifier": "MDZ-243",
+      "title": "lab deploy failed at CI",
+      "description": "lab deploy failed at CI\n\nhttps://github.com/trazadera/modernaize/actions/runs/32082281184\n",
+      "team": { "key": "MDZ", "name": "Modernaize" },
+      "labels": [],
+      "branchName": "mdz-243-lab-deploy-failed-at-ci",
+      "url": "https://linear.app/trazadera/issue/MDZ-243"
+    },
+    "comments": [],
+    "children": [],
+    "attachments": [],
+    "relations": [],
+    "activity": []
+  },
+  "_meta": {}
+}

@@ -1,0 +1,38 @@
+{
+  "id": "req-1",
+  "ok": true,
+  "result": {
+    "issue": {
+      "id": "55c8f368-16ea-492a-a662-6eb9bf9888db",
+      "identifier": "MDZ-238",
+      "title": "Elevar el predicado de join en schema.relations",
+      "description": "## User Story\n\nAs a **migration engineer**, I want the COBOL parser to lift JOIN predicates so that the\ntranslated query keeps its filters.\n\n## Context\n\nThe pilot closed with 26 NOT_APPLICABLE results, every one of them a JOIN whose predicate was\ndropped on transcription.\n\n## Scope\n\nThe COBOL parser's JOIN path only.\n\n**Out of scope:** the Qlik reader — tracked in the spec at https://example.invalid/spec\n\n## Acceptance Criteria\n\n- [ ] The predicate is lifted onto the JOIN.\n\n## Technical Notes\n\nThe mapper needs the same change.\n\n## Definition of Done\n\n- The regression test passes.\n- The corpus does not regress.\n",
+      "team": {
+        "id": "t1",
+        "name": "Modernaize",
+        "key": "MDZ"
+      },
+      "state": {
+        "id": "aa940ba5",
+        "name": "To Do",
+        "type": "unstarted",
+        "color": "#2642b7"
+      },
+      "labels": [
+        {
+          "id": "l1",
+          "name": "Story",
+          "color": "#4EA7FC"
+        }
+      ],
+      "branchName": "vsimon/mdz-238-elevar-el-predicado",
+      "url": "https://linear.app/trazadera/issue/MDZ-238/x"
+    },
+    "comments": [],
+    "children": [],
+    "attachments": [],
+    "relations": [],
+    "activity": []
+  },
+  "_meta": {}
+}

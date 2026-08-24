@@ -12,13 +12,17 @@ The plan is the **source of truth**. Do NOT re-interview the user, regenerate re
 
 **Backend is fixed to codex**: the skill never asks which backend and never writes `.dex/config.json`. `apply` runs **`gpt-5.6-luna` at `high`**, `review` runs **`gpt-5.6-sol` at `high`** — two `codex-<model>-<effort>` entries Step 4 provisions automatically, so neither phase inherits from `~/.codex/config.toml`. Either phase can be re-pointed with `$CODEX_MODEL_*` / `$CODEX_EFFORT_*` (Step 4 provisions the derived entry) or at an entry you named yourself (`$DEX_CLI_BUILD` / `$DEX_CLI_REVIEW`, which wins) — see Step 6 and `docs/codex-tuning.md`.
 
+**Prerequisite — `dex apply` cannot run under Claude Code's auto mode without an explicit Bash allowlist entry.** Every backend this skill provisions runs `codex exec --yolo --ephemeral`: a coding-agent loop with its approval gate disabled, which spawns further agents. Claude Code's auto-mode security classifier refuses commands of that shape under the category **[Create Unsafe Agents]**, and the refusal is broad — a live run had `dex --cli codex apply`, the provisioning write in Step 4, and even a bare `cat ~/.codex/config.toml` issued next to a dex command all denied in the same session. Under `permissions.defaultMode: auto`, the operator must allowlist the dex commands in that workspace's Claude Code settings before this skill can complete. **This skill names the requirement and does not recommend an entry to satisfy it.** What the classifier is refusing is a real thing to refuse — an approval-gate-disabled agent loop, on hosts where an autonomous pipeline may hold push rights — so whether to open that gate, and how narrowly, is the operator's security decision, and the settings it lives in are theirs, not this repo's. Step 4 probes for the refusal so a run that cannot finish stops in seconds instead of after a full translation pass.
+
+**A classifier refusal is not a confirmation gate.** They look alike from inside the session and are opposites: a confirmation gate is a question this skill asked, and an autonomous caller answering it yes is exactly right (`/ship-it` does). A classifier refusal is the *harness* declining to run the command — there is no prompt, no yes to give, and no amount of proceeding-anyway makes it execute. An agent told to "treat every confirmation gate as an answered yes" must not read a denial as one of those: report it, name the remediation, and stop. Retrying it in another phrasing is the failure mode to avoid — that is working around a security control, not clearing a gate.
+
 ---
 
 ## The Job
 
 1. Locate and validate the implementation plan
 2. Translate plan tasks into a dex checkbox-group `plan.md`
-3. Preflight (dex + codex on PATH; verify entitlement and provision the two `codex-<model>-<effort>` backends; branch guard)
+3. Preflight (dex + codex on PATH; **classifier probe**; verify entitlement and provision the two `codex-<model>-<effort>` backends; branch guard)
 4. One confirmation before the autonomous chain
 5. Run `dex import` → `dex --cli "${DEX_CLI_BUILD:-codex-${CODEX_MODEL_BUILD:-gpt-5.6-luna}-${CODEX_EFFORT_BUILD:-high}}" apply` → `dex --cli "${DEX_CLI_REVIEW:-codex-${CODEX_MODEL_REVIEW:-gpt-5.6-sol}-${CODEX_EFFORT_REVIEW:-high}}" review`
 6. Show the handoff report
@@ -104,8 +108,28 @@ If a verification step requires human judgment ("inspect the output", "if WARN l
 
 1. **`dex` on PATH:** `command -v dex` — else STOP: "dex not found. Install: `curl -sSfL https://raw.githubusercontent.com/francescoalemanno/dex/main/install.sh | bash`".
 2. **`codex` on PATH:** `command -v codex` — else STOP: "codex CLI not found; this skill runs dex with the codex backend."
-3. **`--cli` flag form:** `dex --cli codex --help` should exit 0 — confirms `--cli` is accepted as a global option (the form Step 6 uses). If this fails, a future dex version may have moved `--cli` under the subcommand; run `dex --help` to check and adjust the Step 6 commands accordingly. (Validated against dex 0.4.9, where `--cli` is global.)
-4. **Provision the model+effort-pinned backends** (idempotent — a no-op on every run after the first). dex has neither a `--model` nor an effort flag, so a phase can only run on a pinned model at a pinned effort by naming a `clis` entry that carries both. Each phase resolves to `codex-<model>-<effort>`; provision those two entries, add them if missing, never overwrite one that exists — and **verify entitlement first**, because a pinned model is the one thing that can be wrong on a machine that never opted in:
+3. **Classifier probe — run this before anything expensive.** The command below is a no-op that prints usage and exits 0, but it has the exact shape the auto-mode classifier objects to (`dex --cli codex-… apply`), so it trips the same denial as the real run:
+
+   ```bash
+   dex --cli "${DEX_CLI_BUILD:-codex-${CODEX_MODEL_BUILD:-gpt-5.6-luna}-${CODEX_EFFORT_BUILD:-high}}" apply --help
+   ```
+
+   Read the *kind* of failure, not just the failure:
+
+   | What came back | Meaning | Do |
+   |---|---|---|
+   | usage text, exit 0 | the gate is open | continue |
+   | **the tool call was denied by the harness** — a permission/policy refusal, no shell exit code, wording about unsafe agents | the auto-mode classifier is blocking this skill | **STOP** |
+   | non-zero shell exit with dex's own stderr | a dex problem, not a permission one | fix per checks 1–2 and 4 |
+
+   On the classifier STOP, report exactly this and nothing else:
+
+   > `dex apply` is blocked by this session's Claude Code auto-mode security classifier ([Create Unsafe Agents]) — it refuses commands that run a codex backend with `exec --yolo --ephemeral`. This is not a confirmation gate; there is no way to answer it from inside the session. To proceed, an operator must allowlist the dex commands in this workspace's Claude Code Bash permissions, or run `dex import` / `dex apply` / `dex review` manually outside the sandboxed session. No plan was imported and nothing was run.
+
+   Name it as a permission denial, never as a timeout, a dex bug, or a missing binary — those have entirely different remedies, and a run that reports the wrong one sends the operator to the wrong file. **Do not rephrase the command and try again**, and do not route around it by inlining the `codex exec --yolo` call yourself: the classifier is refusing the loop, not the spelling.
+
+4. **`--cli` flag form:** `dex --cli codex --help` should exit 0 — confirms `--cli` is accepted as a global option (the form Step 6 uses). If this fails, a future dex version may have moved `--cli` under the subcommand; run `dex --help` to check and adjust the Step 6 commands accordingly. (Validated against dex 0.4.9, where `--cli` is global.)
+5. **Provision the model+effort-pinned backends** (idempotent — a no-op on every run after the first). dex has neither a `--model` nor an effort flag, so a phase can only run on a pinned model at a pinned effort by naming a `clis` entry that carries both. Each phase resolves to `codex-<model>-<effort>`; provision those two entries, add them if missing, never overwrite one that exists — and **verify entitlement first**, because a pinned model is the one thing that can be wrong on a machine that never opted in:
 
    ```bash
    DEX_CFG="${XDG_CONFIG_HOME:-$HOME/.config}/dex/config.json"
@@ -130,6 +154,8 @@ If a verification step requires human judgment ("inspect the output", "if WARN l
    done
    ```
 
+   **If this write is refused by the harness rather than by `jq`, it is check 3's classifier again** — the block it writes contains `exec --yolo --ephemeral` verbatim. Same STOP, same report; do not hand-edit `config.json` around it.
+
    With nothing set this provisions `codex-gpt-5.6-luna-high` for apply and `codex-gpt-5.6-sol-high` for review. **Any `UNAVAILABLE` line → STOP** and report it with the entitled list: the entry is deliberately not written, so continuing would only reach dex's `unknown CLI` (which exits 0) several minutes later.
 
    The write is **additive**: jq creates `.clis` if absent and leaves every other key (the user's `timeout`, `cli` default, and their own entries) untouched. The `jq -e` guard means a user who has already defined the entry keeps their version. Mention it in the Step 5 confirmation if a `provisioned` line printed — it edits a file outside the repo, so it should not be silent, but it needs no approval: additive keys in a local config, removable with `jq 'del(.clis["codex-gpt-5.6-luna-high"])'`.
@@ -138,7 +164,7 @@ If a verification step requires human judgment ("inspect the output", "if WARN l
 
    **The `codex-` prefix is load-bearing, not cosmetic** — the Step 6 live-worker guard greps for the literal `dex --cli codex`. The derived names keep it (`codex-gpt-5.6-luna-high`). If you ever rename these entries, that guard goes blind to its own worker.
 
-5. **Branch guard:** get the current branch (`git rev-parse --abbrev-ref HEAD`). If it is `main` or `master`, resolve a feature branch (use a name the user provided, else ask for one) and `git switch -c <name>` before any `dex apply`. `dex apply` auto-commits across iterations — those commits must land on a throwaway branch, never `main`/`master`.
+6. **Branch guard:** get the current branch (`git rev-parse --abbrev-ref HEAD`). If it is `main` or `master`, resolve a feature branch (use a name the user provided, else ask for one) and `git switch -c <name>` before any `dex apply`. `dex apply` auto-commits across iterations — those commits must land on a throwaway branch, never `main`/`master`.
 
 ## Step 5: Confirm
 

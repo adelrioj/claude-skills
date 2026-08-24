@@ -1,0 +1,22 @@
+{
+  "id": "req-3",
+  "ok": true,
+  "result": {
+    "issue": {
+      "id": "bbbb",
+      "identifier": "OM-12",
+      "title": "Regression fixture: two-letter team key",
+      "description": "## 🎯 Contexto\n\nFixture only, for repocheck false-match regression coverage.\n",
+      "team": { "id": "t2", "name": "Omega", "key": "OM" },
+      "labels": [],
+      "branchName": "someone/om-12-fixture",
+      "url": "https://linear.app/trazadera/issue/OM-12/x"
+    },
+    "comments": [],
+    "children": [],
+    "attachments": [],
+    "relations": [],
+    "activity": []
+  },
+  "_meta": {}
+}

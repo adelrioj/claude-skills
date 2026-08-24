@@ -35,7 +35,7 @@ Steps 3, 5, 7 run in the main loop: Step 3 is two git commands (no context cost)
 5. Step 4 — Execute via `plan-to-dex` (includes its final Opus review)
 6. Step 5 — Open the PR via `/commit-commands:commit-push-pr`
 7. Step 6 — Review + fix loop: a subagent runs the `/review-pr` panel and applies the CRITICAL/IMPORTANT fixes
-8. Step 7 — Architect completeness review via `architect-review-pr` (report-only)
+8. Step 7 — Architect completeness review via `architect-review-pr` (invoked `report-only`)
 9. Emit the final report
 
 Pipeline state (spec path, plan path, branch, PR number, leftover findings) lives in **conversation memory plus the per-step contract files** in `$RUN_DIR` — never written to the workspace. `$RUN_DIR` is one throwaway directory in the OS temp dir, minted at preflight, holding every step contract, Step 7's architect review report, and the final report. Nothing the pipeline persists ever lands in the repo.
@@ -46,9 +46,16 @@ Pipeline state (spec path, plan path, branch, PR number, leftover findings) live
 
 Run these checks **before any mutation**. Preflight failure is the **only** hard abort; once past it, the never-halt policy governs.
 
-1. **`codex` on PATH:** `command -v codex` — else STOP: "codex CLI not found; required by spec-review-codex and plan-to-dex."
+1. **`codex` on PATH *and logged in*:** `command -v codex`, then `codex login status`. Missing ⇒ STOP: "codex CLI not found; required by spec-review-codex and plan-to-dex." Not logged in ⇒ STOP: "codex is installed but not authenticated (`codex login status` → not logged in). Run `codex login`, or set a valid `OPENAI_API_KEY`." **Check the credential here, not at Step 1.** Dead auth makes `codex exec` hang to its 120s cap and return nothing, which is indistinguishable from a slow review — a live run burned two full attempts that way and reported only "could not run". `codex login status` answers it in under a second, and the two failures need different human actions.
 2. **`dex` on PATH:** `command -v dex` — else STOP: "dex not found. Install: `curl -sSfL https://raw.githubusercontent.com/francescoalemanno/dex/main/install.sh | bash`."
-3. **Codex model + effort resolve to something this account can actually run.** The pipeline pins both per slot with no setup — **`gpt-5.6-luna` at `high` for implementation, `gpt-5.6-sol` at `high` for adversarial review** (`docs/codex-tuning.md`). Everything here **fails open**, which is why this check exists at all: `codex exec -m nope` and `-c model_reasoning_effort=garbage` are both accepted without complaint until the run is underway, and dex's `unknown CLI "<name>"` **still exits 0**. From inside a Step 4 subagent none of that is visible, so the whole pipeline runs on the wrong model — or silently on the machine's own default — for an hour.
+3. **The dex chain is runnable in this session.** `dex apply` runs codex with `exec --yolo --ephemeral`, and Claude Code's auto-mode security classifier refuses commands of that shape under **[Create Unsafe Agents]**. Probe it with a no-op that has the same shape:
+
+   ```bash
+   dex --cli "${DEX_CLI_BUILD:-codex-${CODEX_MODEL_BUILD:-gpt-5.6-luna}-${CODEX_EFFORT_BUILD:-high}}" apply --help
+   ```
+
+   Usage text and exit 0 ⇒ continue. **A refusal from the harness** — a permission/policy denial with no shell exit code — ⇒ STOP: "`dex apply` is blocked by this session's Claude Code auto-mode security classifier ([Create Unsafe Agents]). An operator must allowlist the dex commands in this workspace's Bash permissions, or run the dex phases outside the sandboxed session." Probe it *here*: Step 4 runs `plan-to-dex` inside a subagent, so without this check the block surfaces only after a full codex spec review and a full planning pass have already been spent, and it surfaces as a three-field contract that cannot explain itself. This is a permission denial, never a timeout and never a missing binary — report it as one.
+4. **Codex model + effort resolve to something this account can actually run.** The pipeline pins both per slot with no setup — **`gpt-5.6-luna` at `high` for implementation, `gpt-5.6-sol` at `high` for adversarial review** (`docs/codex-tuning.md`). Everything here **fails open**, which is why this check exists at all: `codex exec -m nope` and `-c model_reasoning_effort=garbage` are both accepted without complaint until the run is underway, and dex's `unknown CLI "<name>"` **still exits 0**. From inside a Step 4 subagent none of that is visible, so the whole pipeline runs on the wrong model — or silently on the machine's own default — for an hour.
 
    ```bash
    MC="$HOME/.codex/models_cache.json"
@@ -77,7 +84,7 @@ Run these checks **before any mutation**. Preflight failure is the **only** hard
 
    **The two `echo`s are not decoration.** They are the only place the resolved model+effort ever become visible: `plan-to-dex` prints its own `Backend:` line, but it runs as a Step 4 **subagent** whose entire output is compressed to a three-field contract, so that line never reaches the user. Type the `${…:-…}` fragments literally and let the shell resolve them — never substitute a model or tier you assumed. Echo both lines verbatim into the preflight summary and carry them into the Final Report.
 
-4. **Required plugins installed:** `pr-review-toolkit` (Step 6's `/review-pr`), `commit-commands` (Step 5's PR), and `superpowers` (Step 2's `writing-plans`). Check the **install registry**, not the filesystem:
+5. **Required plugins installed:** `pr-review-toolkit` (Step 6's `/review-pr`), `commit-commands` (Step 5's PR), and `superpowers` (Step 2's `writing-plans`). Check the **install registry**, not the filesystem:
 
    ```bash
    for p in pr-review-toolkit commit-commands superpowers; do
@@ -89,7 +96,7 @@ Run these checks **before any mutation**. Preflight failure is the **only** hard
    Any `MISSING` line → STOP naming the plugin and what it is needed for. **Do not check with `find ~/.claude/plugins -path '*commands/<cmd>.md'`** — that matches copies inside the `marketplaces/` clones and stale `cache/` versions, so it passes for *any* plugin the marketplace carries whether installed or not, converting a fast preflight abort into a late Step 2/5/6 failure. `installed_plugins.json` (keys are `<name>@<marketplace>`) is the ground truth. If that file does not exist (older Claude Code), fall back to the `find` check and note the weaker signal.
 
    A pre-check is used at all because a slash command's or skill's resolvability cannot be tested without invoking it, and the early abort avoids running the whole pipeline only to fail at the step that needs it. `superpowers` is easy to forget here — `writing-plans` is the one unit that is not part of this plugin, so its absence otherwise surfaces only after a full codex spec-review has already been spent.
-5. **Spec located:** the argument is a path to a design spec; if omitted, find the newest `docs/superpowers/specs/*-design.md` and confirm it with the user before starting. If no file matches that glob, STOP and ask the user to provide the spec path explicitly.
+6. **Spec located:** the argument is a path to a design spec; if omitted, find the newest `docs/superpowers/specs/*-design.md` and confirm it with the user before starting. If no file matches that glob, STOP and ask the user to provide the spec path explicitly.
 
 On any STOP, print the missing item plus its remedy and exit without touching the repo.
 
@@ -115,7 +122,7 @@ If it prints anything other than `ADMIN` / `MAINTAIN` / `WRITE` (or errors), pri
 | 4 | Execute | `Skill(claude-skills:plan-to-dex)` (incl. Opus review) | dex loop completes | dex status + diff summary |
 | 5 | Open PR | `/commit-commands:commit-push-pr` | PR created | PR number / URL |
 | 6 | Review loop | subagent runs `/review-pr` + applies fixes | clean, or capped at 3 passes | leftover findings |
-| 7 | Architect review | `Skill(claude-skills:architect-review-pr)` | report written (report-only) | architect findings |
+| 7 | Architect review | `Skill(claude-skills:architect-review-pr)` | report written (invoked `report-only`) | architect findings |
 
 **Isolation:** Steps 1, 2, 4, 6 run as subagents (raw output stays in the subagent); Steps 3, 5, 7 run in the main loop, and Step 6's commit/push fix loop is driven by the conductor around its per-pass review-and-fix subagent (see Step Isolation).
 
@@ -225,7 +232,7 @@ After 3 passes, stop even if findings remain. Each pass's contract file carries 
 
 ## Step 7: Architect Review
 
-Run `Skill(claude-skills:architect-review-pr)` against the branch — the completeness & wiring pass ("is this actually done and integrated?") that complements Step 6's line-level review. **Invoke it with `report-path=$RUN_DIR/architect-review.md`** — its documented token for a caller-supplied report path, which it uses instead of minting its own. Pass no scope argument: it scopes findings to the branch diff vs base on its own. It runs in the main loop (it already dispatches its own fresh-context subagent — see Step Isolation) and it is **report-only**: the conductor reads that exact path and records its ranked findings (Unwired / Missing / Incomplete / Bug-edge / Risk) verbatim enough to act on, fixes nothing, and continues to the final report (never halt on quality).
+Run `Skill(claude-skills:architect-review-pr)` against the branch — the completeness & wiring pass ("is this actually done and integrated?") that complements Step 6's line-level review. **Invoke it with `report-path=$RUN_DIR/architect-review.md report-only`** — `report-path=` is its documented token for a caller-supplied report path, which it uses instead of minting its own, and `report-only` disables the CRITICAL fix loop the skill runs by default when invoked standalone. The opt-out is deliberate: the conductor already ran its own fix loop in Step 6 and commits nothing after this step, so an in-skill fix here would strand uncommitted edits on an already-pushed PR. Pass no scope argument: it scopes findings to the branch diff vs base on its own. It runs in the main loop (it already dispatches its own fresh-context subagent — see Step Isolation) and, so invoked, it is **report-only**: the conductor reads that exact path and records its ranked findings (Unwired / Missing / Incomplete / Bug-edge / Risk) verbatim enough to act on, fixes nothing, and continues to the final report (never halt on quality).
 
 **Read only `$RUN_DIR/architect-review.md`.** Never glob `architect-review-pr-*.md` in the temp dir — a report from a previous session on a *different* ticket satisfies that pattern, and presenting stale findings as this run's is a worse outcome than reporting none. If the file does not exist, record Step 7 as `failed (no architect report produced)` and say so in the final report.
 
@@ -260,6 +267,7 @@ The subagent runs the step AND writes the contract — the raw output stays in *
 > You are executing one step of an autonomous pipeline. Invoke `Skill(<step-skill>)` with these inputs: <inputs>. Let it run to completion. **You MUST NOT return until the step reaches a terminal state.** If the step launches a long-running process (e.g. `dex apply` or `dex review`, or a spec-review codex pass), poll it to completion **in THIS invocation** — returning reaps any backgrounded work and silently discards the result.
 >
 > **AUTONOMOUS — NO USER IS REACHABLE. The skills you invoke were written for interactive use and WILL try to ask you questions. Every one of them is pre-approved.**
+> - **A refusal from the harness is not a confirmation gate — never answer it yes.** A confirmation gate is a question the *skill* asked; a security-classifier denial (e.g. `dex apply` under [Create Unsafe Agents]) is the *harness* declining to run the command, with no prompt and nothing to answer. Do not rephrase the command, do not inline what it would have run, do not record it as a timeout: set `outcome: failed`, put the denial and its remediation in `notes`, and finalize the contract. Preflight check 3 exists to catch this before a run is spent; if it still appears mid-run, it is a stop, not a gate.
 > - Treat every confirmation gate in the invoked skill as an answered **yes** and proceed. Never ask, never wait for input, never stop to present a choice. (`plan-to-dex` Step 5 presents `Proceed? [y/N]` — the answer is yes; its plan-validation "ask whether to proceed" and its quality-gate "What commands must pass?" are answered from the repo's own tooling, and its branch guard uses the branch the conductor already resolved.)
 > - **`writing-plans` (Step 2): STOP the moment the plan file is written.** Its final "Execution Handoff" section asks **"Which approach?"** and attaches a REQUIRED SUB-SKILL (`subagent-driven-development` / `executing-plans`) to each answer. Do **not** pick one, do **not** invoke either sub-skill, do **not** begin implementing the plan — Step 4 of this pipeline executes it via dex, and implementing here duplicates that work on the same branch. Writing the plan file is your entire job.
 > - **`spec-review-codex` (Step 1): on its 120s codex timeout, retry once.** Its skill says to ask the user whether to retry or skip — you cannot. Retry once; if it times out again, record `failed` with the timeout in `notes` and finalize the contract.
@@ -341,3 +349,4 @@ Because nothing stops mid-run to flag problems, the final report is the contract
 - **Unresolved findings:** every leftover CRITICAL/IMPORTANT from spec-review, every unfixed/skipped PR-review finding, **and** the architect review's ranked findings, verbatim enough to act on.
 - **Failed dex tasks:** any task the dex loop could not complete.
 - **Resume guidance:** what to pick up by hand, with paths to the spec, plan, branch, PR, and architect review report.
+- **Stale ticket attachment**, when the spec is identifier-keyed (`<IDENT>-design.md`, which is what `/linear-spec-ticket` writes). Step 1 edited that file in place, so the copy attached to `<IDENT>` is the pre-review draft. Name `/linear-spec-ticket <IDENT> refresh` as a manual follow-up — this pipeline touches no Linear ticket at any point, which also means nothing here advances one.
